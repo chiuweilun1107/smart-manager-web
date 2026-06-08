@@ -276,25 +276,25 @@
             <div class="cbody" id="emp-chat"></div>
           </div>
         </div>
-        <!-- 1 主管：待簽一鍵批 -->
+        <!-- 1 主管：對話式 -->
         <div class="sol-ui" data-ui="1">
-          <div class="appwin">
-            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">待我簽核 <span class="cnt" id="mgr-cnt">(0)</span></span></div>
-            <div class="appwin-body" id="mgr-body"></div>
+          <div class="appwin chatwin">
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">智慧經理 · 幫主管把關</span></div>
+            <div class="cbody" id="mgr-chat"></div>
           </div>
         </div>
-        <!-- 2 HR：自助問答 -->
+        <!-- 2 HR：對話式 -->
         <div class="sol-ui" data-ui="2">
-          <div class="appwin">
-            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">員工自助 · AI 即時回覆</span></div>
-            <div class="appwin-body" id="hr-body"></div>
+          <div class="appwin chatwin">
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">智慧經理 · 幫 HR 擋問題</span></div>
+            <div class="cbody" id="hr-chat"></div>
           </div>
         </div>
-        <!-- 3 老闆：儀表板 -->
+        <!-- 3 老闆：對話式 -->
         <div class="sol-ui" data-ui="3">
-          <div class="appwin">
-            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">全公司流程儀表板</span></div>
-            <div class="appwin-body" id="boss-body"></div>
+          <div class="appwin chatwin">
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">智慧經理 · 幫老闆看全局</span></div>
+            <div class="cbody" id="boss-chat"></div>
           </div>
         </div>
       </div>
@@ -465,50 +465,60 @@
 
   // 主管：待簽一鍵批
   async function playManager(tk){
-    const body=document.getElementById('mgr-body');const cnt=document.getElementById('mgr-cnt');
-    body.innerHTML='';cnt.textContent='(0)';await sleep(300);if(!alive(tk))return;
-    const items=[['陳怡君 · 特休 1 天','等待 2 天'],['林大文 · 報帳 $3,200','等待 1 天 · 附件齊全'],['王小美 · 採購單','等待 4 小時']];
-    const rows=[];
-    for(let i=0;i<items.length;i++){if(!alive(tk))return;
-      const r=document.createElement('div');r.className='urow';r.innerHTML='<div class="ut"><b>'+items[i][0]+'</b><small>'+items[i][1]+'</small></div><button class="mini-btn ok">批准</button><button class="mini-btn gho">退回</button>';
-      body.appendChild(r);rows.push(r);await sleep(60);r.classList.add('in');cnt.textContent='('+(i+1)+')';await sleep(450);}
-    await sleep(700);
-    for(let i=0;i<rows.length;i++){if(!alive(tk))return;
-      const btn=rows[i].querySelector('.mini-btn.ok');btn.textContent='✓ 已批';btn.style.background='var(--air-500)';
-      rows[i].classList.add('cleared');await sleep(350);rows[i].classList.add('fade');cnt.textContent='('+(rows.length-1-i)+')';await sleep(450);}
-    if(!alive(tk))return;
-    const done=document.createElement('div');done.className='uihint in';done.innerHTML='💡 <span>卡在你這的單<b>一目了然</b>，手機一鍵全批完——不用再被退件補件來回拖</span>';body.appendChild(done);
+    const sc=document.getElementById('mgr-chat');sc.innerHTML='';await sleep(300);if(!alive(tk))return;
+    chatUser(sc,'今天有哪些單要我簽？');
+    await sleep(700);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
+    chatAi(sc,'早安！今天有 <b>3 張</b>待簽，我都先幫你查核過附件了 👇');
+    await sleep(400);if(!alive(tk))return;
+    const card=chatAi(sc,'<div class="c-card" style="max-width:330px"><div class="cc-head">待我簽核 (3)</div><div class="cc-body" id="mgr-list"></div></div>');
+    const list=card.querySelector('#mgr-list');
+    const items=[['陳怡君 · 特休 1 天','等待 2 天'],['林大文 · 報帳 $3,200','附件齊全'],['王小美 · 採購單','等待 4 小時']];
+    for(const it of items){if(!alive(tk))return;const r=document.createElement('div');r.className='urow';r.style.marginBottom='8px';r.innerHTML='<div class="ut"><b>'+it[0]+'</b><small>'+it[1]+'</small></div><span class="chip wait" data-c>待批</span>';list.appendChild(r);await sleep(50);r.classList.add('in');sc.scrollTop=sc.scrollHeight;await sleep(420);}
+    await sleep(400);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
+    chatAi(sc,'都查核沒問題，要一鍵全批嗎？');
+    await sleep(600);if(!alive(tk))return;
+    const cu=document.createElement('div');cu.className='msg user';cu.innerHTML='<div class="confirm-btns"><span class="cbtn yes">✓ 全部批准</span><span class="cbtn">逐筆看</span></div>';sc.appendChild(cu);sc.scrollTop=sc.scrollHeight;
+    await sleep(1200);if(!alive(tk))return;cu.remove();chatUser(sc,'全部批准 ✓');
+    await sleep(500);if(!alive(tk))return;
+    const chips=list.querySelectorAll('[data-c]');for(const c of chips){if(!alive(tk))return;c.className='chip done';c.textContent='✓ 已批';await sleep(380);}
+    await sleep(400);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
+    chatAi(sc,'✅ 3 張都簽完了，從打開到批完只花你幾秒——不用再被退件補件來回拖。','ok');
   }
 
   // HR：自助問答 + 統計
   async function countUp(el,to,suffix,tk){const dur=900,steps=30;for(let i=1;i<=steps;i++){if(!alive(tk))return;el.innerHTML=Math.round(to*i/steps).toLocaleString()+(suffix||'');await sleep(dur/steps);}}
   async function playHR(tk){
-    const body=document.getElementById('hr-body');body.innerHTML='';await sleep(300);if(!alive(tk))return;
-    body.innerHTML='<div class="stat-row"><div class="stat"><div class="n" id="hr1">0</div><div class="l">本月自動回覆</div></div><div class="stat"><div class="n" id="hr2">0</div><div class="l">不用轉人工</div></div><div class="stat"><div class="n" id="hr3">0</div><div class="l">省下工時</div></div></div><div id="hr-rows"></div>';
-    countUp(document.getElementById('hr1'),248,'',tk);countUp(document.getElementById('hr2'),92,'%',tk);countUp(document.getElementById('hr3'),12,' hr',tk);
-    await sleep(1000);if(!alive(tk))return;
-    const rows=document.getElementById('hr-rows');
-    const qa=[['員工問：特休怎麼算？','AI 依公司規定自動回覆'],['員工問：我的報帳到哪了？','AI 自動查進度回覆']];
-    for(const q of qa){if(!alive(tk))return;
-      const r=document.createElement('div');r.className='urow';r.innerHTML='<div class="ut"><b>'+q[0]+'</b><small>'+q[1]+'</small></div><span class="chip done">AI 已答</span>';
-      rows.appendChild(r);await sleep(60);r.classList.add('in');await sleep(700);}
-    if(!alive(tk))return;const h=document.createElement('div');h.className='uihint in';h.innerHTML='💡 <span>重複問題 AI 自動擋掉，<b>HR 不再被一直打斷</b></span>';body.appendChild(h);
+    const sc=document.getElementById('hr-chat');sc.innerHTML='';await sleep(300);if(!alive(tk))return;
+    let t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
+    chatAi(sc,'跟你回報一下，今天員工的重複問題我都先擋掉了 👇');
+    await sleep(400);if(!alive(tk))return;
+    const card=chatAi(sc,'<div class="c-card" style="max-width:330px"><div class="cc-head">今日自動回覆</div><div class="cc-body"><div class="stat-row" style="margin-bottom:0"><div class="stat"><div class="n" id="hr1">0</div><div class="l">已回覆</div></div><div class="stat"><div class="n" id="hr2">0</div><div class="l">不轉人工</div></div><div class="stat"><div class="n" id="hr3">0</div><div class="l">省工時</div></div></div></div></div>');
+    countUp(card.querySelector('#hr1'),248,'',tk);countUp(card.querySelector('#hr2'),92,'%',tk);countUp(card.querySelector('#hr3'),12,' hr',tk);
+    await sleep(1100);if(!alive(tk))return;
+    chatAi(sc,'例如：員工問<b>「特休怎麼算」</b>→ 我依公司規定回了；問<b>「我的單到哪」</b>→ 我自動查進度回了。');
+    await sleep(1000);if(!alive(tk))return;chatUser(sc,'這樣我輕鬆多了 🙌');
+    await sleep(600);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
+    chatAi(sc,'✅ 重複問題我顧著，你專心做要緊的事就好。','ok');
   }
 
   // 老闆：儀表板 count-up + 進度條
   async function playBoss(tk){
-    const body=document.getElementById('boss-body');body.innerHTML='';await sleep(300);if(!alive(tk))return;
-    body.innerHTML='<div class="stat-row"><div class="stat"><div class="n" id="b1">0</div><div class="l">本月處理單</div></div><div class="stat"><div class="n" id="b2">0</div><div class="l">平均簽核時間</div></div><div class="stat"><div class="n" id="b3">0</div><div class="l">人工把關比例</div></div></div>'+
-      '<div class="barrow"><span class="bl">業務部</span><span class="bt"><span class="bf" id="bb1"></span></span><span class="bv">78%</span></div>'+
-      '<div class="barrow"><span class="bl">工程部</span><span class="bt"><span class="bf" id="bb2"></span></span><span class="bv">54%</span></div>'+
-      '<div class="barrow"><span class="bl">行政部</span><span class="bt"><span class="bf" id="bb3"></span></span><span class="bv">95%</span></div>';
-    countUp(document.getElementById('b1'),1280,'',tk);
-    (async()=>{const e=document.getElementById('b2');for(let i=1;i<=20;i++){if(!alive(tk))return;e.innerHTML=(12-Math.round(8*i/20))+'<small>hr ↓65%</small>';await sleep(45);}})();
-    countUp(document.getElementById('b3'),8,'%',tk);
+    const sc=document.getElementById('boss-chat');sc.innerHTML='';await sleep(300);if(!alive(tk))return;
+    chatUser(sc,'公司流程現在跑得怎樣？');
+    await sleep(700);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
+    chatAi(sc,'這個月處理 <b>1,280 單</b>，平均 4 小時簽完，比以前快 65% 👇');
     await sleep(400);if(!alive(tk))return;
-    document.getElementById('bb1').style.width='78%';document.getElementById('bb2').style.width='54%';document.getElementById('bb3').style.width='95%';
-    await sleep(1100);if(!alive(tk))return;
-    const h=document.createElement('div');h.className='uihint in';h.innerHTML='💡 <span>進度全透明、出事前先預警；<b>AI 只填不送，送出永遠人工把關</b>——放心交出去</span>';body.appendChild(h);
+    const card=chatAi(sc,'<div class="c-card" style="max-width:340px"><div class="cc-head">全公司流程儀表板</div><div class="cc-body"><div class="stat-row"><div class="stat"><div class="n" id="bs1">0</div><div class="l">本月處理</div></div><div class="stat"><div class="n" id="bs2">0</div><div class="l">平均簽核</div></div><div class="stat"><div class="n" id="bs3">0</div><div class="l">人工把關</div></div></div><div class="barrow"><span class="bl">業務部</span><span class="bt"><span class="bf" id="bb1"></span></span><span class="bv">78%</span></div><div class="barrow"><span class="bl">工程部</span><span class="bt"><span class="bf" id="bb2"></span></span><span class="bv">54%</span></div><div class="barrow" style="margin-bottom:0"><span class="bl">行政部</span><span class="bt"><span class="bf" id="bb3"></span></span><span class="bv">95%</span></div></div></div>');
+    countUp(card.querySelector('#bs1'),1280,'',tk);
+    (async()=>{const e=card.querySelector('#bs2');for(let i=1;i<=18;i++){if(!alive(tk))return;e.innerHTML=(12-Math.round(8*i/18))+'<small>hr</small>';await sleep(45);}})();
+    countUp(card.querySelector('#bs3'),8,'%',tk);
+    await sleep(300);if(!alive(tk))return;card.querySelector('#bb1').style.width='78%';card.querySelector('#bb2').style.width='54%';card.querySelector('#bb3').style.width='95%';sc.scrollTop=sc.scrollHeight;
+    await sleep(1300);if(!alive(tk))return;chatUser(sc,'AI 會不會亂送、出包？');
+    await sleep(700);if(!alive(tk))return;t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
+    chatAi(sc,'✋ 不會——我只負責<b>填好</b>，送出永遠是人按的；8% 都有人工把關，每張單全程留紀錄。','warn');
+    await sleep(900);if(!alive(tk))return;chatUser(sc,'那我放心 👍');
+    await sleep(600);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
+    chatAi(sc,'✅ 進度全透明、出事前先預警，放心交給我。','ok');
   }
 
   const players=[playEmployee,playManager,playHR,playBoss];
