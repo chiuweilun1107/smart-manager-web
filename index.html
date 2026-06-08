@@ -428,39 +428,31 @@
   async function typeLv(el,text,tk){el.innerHTML='<span class="cur"></span>';let s='';for(const c of text){if(!alive(tk))return;s+=c;el.innerHTML=s+'<span class="cur"></span>';await sleep(55);}el.innerHTML=s+'<span class="tag">AI 自動帶入</span>';el.classList.add('done');}
   async function playEmployee(tk){
     const sc=document.getElementById('emp-chat');sc.innerHTML='';await sleep(300);if(!alive(tk))return;
-    chatUser(sc,'我想請下週三的特休 🌴');
+    chatUser(sc,'我想請下週三的特休');
     await sleep(750);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
-    chatAi(sc,'沒問題，陳怡君！先幫你核對一下基本資料 👇');
+    chatAi(sc,'好的，陳怡君。先跟你核對基本資料 👇');
     await sleep(400);if(!alive(tk))return;
-    chatAi(sc,'<div class="c-card"><div class="cc-head">員工資料</div><div class="cc-body"><div class="cc-row"><span class="k">姓名</span><span class="v">陳怡君</span></div><div class="cc-row"><span class="k">部門</span><span class="v">業務部</span></div><div class="cc-row"><span class="k">員工編號</span><span class="v">A1023</span></div><div class="cc-row"><span class="k">職務代理人</span><span class="v">王大明</span></div><div class="cc-row"><span class="k">剩餘特休</span><span class="v">5 天</span></div></div></div>以上正確嗎？');
+    chatAi(sc,'<div class="c-card"><div class="cc-head">員工資料</div><div class="cc-body"><div class="cc-row"><span class="k">姓名</span><span class="v">陳怡君</span></div><div class="cc-row"><span class="k">部門</span><span class="v">業務部</span></div><div class="cc-row"><span class="k">職務代理人</span><span class="v">王大明</span></div><div class="cc-row"><span class="k">剩餘特休</span><span class="v">5 天</span></div></div></div>以上正確嗎？');
     await sleep(800);if(!alive(tk))return;
     const cu=document.createElement('div');cu.className='msg user';cu.innerHTML='<div class="confirm-btns"><span class="cbtn yes">✓ 正確</span><span class="cbtn">需修改</span></div>';sc.appendChild(cu);sc.scrollTop=sc.scrollHeight;
-    await sleep(1200);if(!alive(tk))return;cu.remove();chatUser(sc,'正確 ✓');
+    await sleep(1200);if(!alive(tk))return;cu.remove();chatUser(sc,'正確');
     await sleep(700);if(!alive(tk))return;t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
-    chatAi(sc,'好，幫你把<b>請假單</b>填好了，你核對一下 👇');
+    chatAi(sc,'已依你的需求把請假單填好，確認後按送出即可 👇');
     await sleep(400);if(!alive(tk))return;
-    const card=chatAi(sc,'<div class="lf-mini"><div class="lr"><span class="lk">申請人</span><span class="lv" id="ev1"></span></div><div class="lr"><span class="lk">假別</span><span class="lv" id="ev2"></span></div><div class="lr"><span class="lk">日期</span><span class="lv" id="ev3"></span></div><div class="lr"><span class="lk">天數</span><span class="lv" id="ev4"></span></div><div class="lr"><span class="lk">代理人</span><span class="lv" id="ev5"></span></div></div>');
+    const card=chatAi(sc,'<div class="lf-mini"><div class="lr"><span class="lk">申請人</span><span class="lv" id="ev1"></span></div><div class="lr"><span class="lk">假別</span><span class="lv" id="ev2"></span></div><div class="lr"><span class="lk">日期</span><span class="lv" id="ev3"></span></div><div class="lr"><span class="lk">天數</span><span class="lv" id="ev4"></span></div><div class="lr"><span class="lk">代理人</span><span class="lv" id="ev5"></span></div><button class="lf-submit" id="emp-sb">送出申請</button></div>');
     await typeLv(card.querySelector('#ev1'),'陳怡君',tk);if(!alive(tk))return;
     await typeLv(card.querySelector('#ev2'),'特休',tk);if(!alive(tk))return;
     await typeLv(card.querySelector('#ev3'),'2026/06/11（三）',tk);if(!alive(tk))return;
     await typeLv(card.querySelector('#ev4'),'1 天',tk);if(!alive(tk))return;
     await typeLv(card.querySelector('#ev5'),'王大明',tk);if(!alive(tk))return;
-    await sleep(450);if(!alive(tk))return;t=chatTyping(sc);await sleep(1000);if(!alive(tk))return;t.remove();
-    chatAi(sc,'✋ 都幫你填好了！不過<b>送出要你親自按</b>——我不會替你送出，確認沒問題再按。','warn');
-    await sleep(1700);if(!alive(tk))return;chatUser(sc,'（已親自按下送出）');
-    await sleep(700);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
-    chatAi(sc,'收到！我幫你追到簽完 👇');
     await sleep(400);if(!alive(tk))return;
-    const flow=chatAi(sc,'<div class="estep-flow"><div class="fstep" id="ef1"><div class="fdot"></div><span>提交</span></div><div class="fline" id="el1"></div><div class="fstep" id="ef2"><div class="fdot"></div><span>主管審核</span></div><div class="fline" id="el2"></div><div class="fstep" id="ef3"><div class="fdot"></div><span>完成</span></div></div>');
-    const ef1=flow.querySelector('#ef1'),ef2=flow.querySelector('#ef2'),ef3=flow.querySelector('#ef3'),el1=flow.querySelector('#el1'),el2=flow.querySelector('#el2');
-    await sleep(400);if(!alive(tk))return;ef1.classList.add('done');ef1.querySelector('.fdot').textContent='✓';sc.scrollTop=sc.scrollHeight;
-    await sleep(500);if(!alive(tk))return;el1.classList.add('fill');
-    await sleep(600);if(!alive(tk))return;ef2.classList.add('active');ef2.querySelector('.fdot').innerHTML='<span class="spin"></span>';
-    await sleep(1500);if(!alive(tk))return;ef2.classList.remove('active');ef2.classList.add('done');ef2.querySelector('.fdot').textContent='✓';
-    await sleep(300);if(!alive(tk))return;el2.classList.add('fill');
-    await sleep(600);if(!alive(tk))return;ef3.classList.add('done');ef3.querySelector('.fdot').textContent='✓';
+    const btn=card.querySelector('#emp-sb');btn.classList.add('ready');sc.scrollTop=sc.scrollHeight;
+    await sleep(1300);if(!alive(tk))return;
+    btn.classList.remove('ready');btn.classList.add('clicked');btn.innerHTML='✓ 已送出（員工親按）';
+    await sleep(450);if(!alive(tk))return;chatUser(sc,'（員工按下送出）');
     await sleep(500);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
-    chatAi(sc,'✅ 簽核完成！特休已扣 1 天，<b>剩餘 4 天</b>。','ok');
+    chatAi(sc,'已送出，這張單的進度我幫你追蹤：');
+    chatAi(sc,'<div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>請假申請單 · 特休 1 天</b><small>09:24 送出</small></div><span class="chip prog">審核中 · 在王主管</span></div>');
   }
 
   // 主管：待簽一鍵批
@@ -468,37 +460,32 @@
     const sc=document.getElementById('mgr-chat');sc.innerHTML='';await sleep(300);if(!alive(tk))return;
     chatUser(sc,'今天有哪些單要我簽？');
     await sleep(700);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
-    chatAi(sc,'早安！今天有 <b>3 張</b>待簽，我都先幫你查核過附件了 👇');
+    chatAi(sc,'有 <b>3 張</b>待簽，附件都已查核 👇');
     await sleep(400);if(!alive(tk))return;
-    const card=chatAi(sc,'<div class="c-card" style="max-width:330px"><div class="cc-head">待我簽核 (3)</div><div class="cc-body" id="mgr-list"></div></div>');
+    const card=chatAi(sc,'<div class="c-card" style="max-width:340px"><div class="cc-head">待我簽核 (3)</div><div class="cc-body" id="mgr-list"></div></div>');
     const list=card.querySelector('#mgr-list');
     const items=[['陳怡君 · 特休 1 天','等待 2 天'],['林大文 · 報帳 $3,200','附件齊全'],['王小美 · 採購單','等待 4 小時']];
-    for(const it of items){if(!alive(tk))return;const r=document.createElement('div');r.className='urow';r.style.marginBottom='8px';r.innerHTML='<div class="ut"><b>'+it[0]+'</b><small>'+it[1]+'</small></div><span class="chip wait" data-c>待批</span>';list.appendChild(r);await sleep(50);r.classList.add('in');sc.scrollTop=sc.scrollHeight;await sleep(420);}
-    await sleep(400);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
-    chatAi(sc,'都查核沒問題，要一鍵全批嗎？');
-    await sleep(600);if(!alive(tk))return;
-    const cu=document.createElement('div');cu.className='msg user';cu.innerHTML='<div class="confirm-btns"><span class="cbtn yes">✓ 全部批准</span><span class="cbtn">逐筆看</span></div>';sc.appendChild(cu);sc.scrollTop=sc.scrollHeight;
-    await sleep(1200);if(!alive(tk))return;cu.remove();chatUser(sc,'全部批准 ✓');
-    await sleep(500);if(!alive(tk))return;
-    const chips=list.querySelectorAll('[data-c]');for(const c of chips){if(!alive(tk))return;c.className='chip done';c.textContent='✓ 已批';await sleep(380);}
-    await sleep(400);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
-    chatAi(sc,'✅ 3 張都簽完了，從打開到批完只花你幾秒——不用再被退件補件來回拖。','ok');
+    const rows=[];
+    for(const it of items){if(!alive(tk))return;const r=document.createElement('div');r.className='urow';r.style.marginBottom='8px';r.innerHTML='<div class="ut"><b>'+it[0]+'</b><small>'+it[1]+'</small></div><button class="mini-btn ok" data-ap>核准</button>';list.appendChild(r);await sleep(50);r.classList.add('in');sc.scrollTop=sc.scrollHeight;rows.push(r);await sleep(420);}
+    await sleep(800);if(!alive(tk))return;
+    for(const r of rows){if(!alive(tk))return;const b=r.querySelector('[data-ap]');b.textContent='✓ 已核准';b.style.background='var(--air-500)';b.style.color='#fff';r.classList.add('cleared');await sleep(560);}
+    await sleep(300);if(!alive(tk))return;chatUser(sc,'（主管逐張按下核准）');
+    await sleep(500);if(!alive(tk))return;t=chatTyping(sc);await sleep(800);if(!alive(tk))return;t.remove();
+    chatAi(sc,'3 張都已核准，各自往下一關送出。');
   }
 
   // HR：自助問答 + 統計
   async function countUp(el,to,suffix,tk){const dur=900,steps=30;for(let i=1;i<=steps;i++){if(!alive(tk))return;el.innerHTML=Math.round(to*i/steps).toLocaleString()+(suffix||'');await sleep(dur/steps);}}
   async function playHR(tk){
     const sc=document.getElementById('hr-chat');sc.innerHTML='';await sleep(300);if(!alive(tk))return;
-    let t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
-    chatAi(sc,'跟你回報一下，今天員工的重複問題我都先擋掉了 👇');
+    chatUser(sc,'今天幫我擋掉多少重複問題？');
+    await sleep(700);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
+    chatAi(sc,'今天自動回覆 248 則，其中 92% 不用轉給你 👇');
     await sleep(400);if(!alive(tk))return;
     const card=chatAi(sc,'<div class="c-card" style="max-width:330px"><div class="cc-head">今日自動回覆</div><div class="cc-body"><div class="stat-row" style="margin-bottom:0"><div class="stat"><div class="n" id="hr1">0</div><div class="l">已回覆</div></div><div class="stat"><div class="n" id="hr2">0</div><div class="l">不轉人工</div></div><div class="stat"><div class="n" id="hr3">0</div><div class="l">省工時</div></div></div></div></div>');
     countUp(card.querySelector('#hr1'),248,'',tk);countUp(card.querySelector('#hr2'),92,'%',tk);countUp(card.querySelector('#hr3'),12,' hr',tk);
     await sleep(1100);if(!alive(tk))return;
-    chatAi(sc,'例如：員工問<b>「特休怎麼算」</b>→ 我依公司規定回了；問<b>「我的單到哪」</b>→ 我自動查進度回了。');
-    await sleep(1000);if(!alive(tk))return;chatUser(sc,'這樣我輕鬆多了 🙌');
-    await sleep(600);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
-    chatAi(sc,'✅ 重複問題我顧著，你專心做要緊的事就好。','ok');
+    chatAi(sc,'例如：員工問<b>「特休怎麼算」</b>→ 依公司規定回覆；問<b>「我的單到哪了」</b>→ 自動查進度回覆。需要你裁量的才會轉給你。');
   }
 
   // 老闆：儀表板 count-up + 進度條
@@ -513,12 +500,9 @@
     (async()=>{const e=card.querySelector('#bs2');for(let i=1;i<=18;i++){if(!alive(tk))return;e.innerHTML=(12-Math.round(8*i/18))+'<small>hr</small>';await sleep(45);}})();
     countUp(card.querySelector('#bs3'),8,'%',tk);
     await sleep(300);if(!alive(tk))return;card.querySelector('#bb1').style.width='78%';card.querySelector('#bb2').style.width='54%';card.querySelector('#bb3').style.width='95%';sc.scrollTop=sc.scrollHeight;
-    await sleep(1300);if(!alive(tk))return;chatUser(sc,'AI 會不會亂送、出包？');
+    await sleep(1300);if(!alive(tk))return;chatUser(sc,'送出會不會出錯？');
     await sleep(700);if(!alive(tk))return;t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
-    chatAi(sc,'✋ 不會——我只負責<b>填好</b>，送出永遠是人按的；8% 都有人工把關，每張單全程留紀錄。','warn');
-    await sleep(900);if(!alive(tk))return;chatUser(sc,'那我放心 👍');
-    await sleep(600);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
-    chatAi(sc,'✅ 進度全透明、出事前先預警，放心交給我。','ok');
+    chatAi(sc,'送出都是人按的，AI 只負責填好；其中 8% 經人工把關，每張單全程留紀錄、可追溯。');
   }
 
   const players=[playEmployee,playManager,playHR,playBoss];
