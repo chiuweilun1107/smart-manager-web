@@ -107,7 +107,7 @@
   .barrow .bl{width:64px;color:var(--text-2)}.barrow .bt{flex:1;height:8px;background:var(--surface-muted);border-radius:99px;overflow:hidden}
   .barrow .bf{height:100%;width:0;background:var(--blue-500);border-radius:99px;transition:width 1s var(--ease)}.barrow .bv{width:42px;text-align:right;color:var(--muted);font-size:12px}
   /* chat (員工動畫) */
-  .chatwin .cbody{padding:18px 18px;min-height:300px;display:flex;flex-direction:column;gap:11px}
+  .chatwin .cbody{padding:18px;height:460px;overflow-y:auto;display:flex;flex-direction:column;gap:11px;scroll-behavior:smooth}
   .msg{display:flex;gap:9px;max-width:92%;animation:msgIn .4s var(--ease)}
   .msg.user{align-self:flex-end;flex-direction:row-reverse}.msg.ai{align-self:flex-start}
   @keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
