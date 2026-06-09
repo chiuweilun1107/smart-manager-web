@@ -97,6 +97,7 @@
   .chip.wait{background:var(--earth-100);color:var(--earth-600)}
   .chip.done{background:var(--air-100);color:var(--air-600)}
   .chip.prog{background:var(--blue-100);color:var(--blue-600)}
+  .chip.alert{background:#fdeae8;color:var(--caution)}
   .mini-btn{font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:var(--pill);border:0;cursor:pointer}
   .mini-btn.ok{background:var(--blue-500);color:#fff}
   .mini-btn.gho{background:#fff;border:1px solid var(--border);color:var(--text-2)}
@@ -305,7 +306,7 @@
         <!-- 2 HR：對話式 -->
         <div class="sol-ui" data-ui="2">
           <div class="appwin chatwin">
-            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">智慧精靈 · 幫 HR 擋問題</span></div>
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">智慧精靈 · 幫 HR 出報表</span></div>
             <div class="cbody" id="hr-chat"></div>
           </div>
         </div>
@@ -540,14 +541,14 @@
   async function countUp(el,to,suffix,tk){const dur=900,steps=30;for(let i=1;i<=steps;i++){if(!alive(tk))return;el.innerHTML=Math.round(to*i/steps).toLocaleString()+(suffix||'');await sleep(dur/steps);}}
   async function playHR(tk){
     const sc=document.getElementById('hr-chat');sc.innerHTML='';const modal=ensureModal();modal.classList.remove('show');await sleep(300);if(!alive(tk))return;
-    chatUser(sc,'今天幫我擋掉多少重複問題？');
-    await sleep(700);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
-    chatAi(sc,'幫你開後台看今天的處理情況 👇');
+    chatUser(sc,'月底了，幫我把這個月的差勤、報帳彙整成報表');
+    await sleep(700);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1200);if(!alive(tk))return;t.remove();
+    chatAi(sc,'6 月差勤、報帳都彙整好了，順手幫你揪出 3 筆要處理的 👇');
     await sleep(500);if(!alive(tk))return;
-    await showPanel(modal,'AI 客服後台 · 今日','<div class="stat-row"><div class="stat"><div class="n">248</div><div class="l">已自動回覆</div></div><div class="stat"><div class="n">92%</div><div class="l">不轉人工</div></div><div class="stat"><div class="n">12 hr</div><div class="l">省下工時</div></div></div><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>員工問：特休怎麼算？</b><small>AI 依公司規定回覆</small></div><span class="chip done">AI 已答</span></div><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>員工問：我的報帳到哪了？</b><small>AI 自動查進度回覆</small></div><span class="chip done">AI 已答</span></div><div class="urow in" style="opacity:1;transform:none;margin-bottom:0"><div class="ut"><b>員工問：加班費怎麼報？</b><small>AI 依規定回覆＋附表單連結</small></div><span class="chip done">AI 已答</span></div>',tk);
-    if(!alive(tk))return;chatUser(sc,'這些都自動回掉了');
-    await sleep(500);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
-    chatAi(sc,'是，需要你裁量的才會轉給你處理。');
+    await showPanel(modal,'6 月差勤・報帳彙整','<div class="stat-row"><div class="stat"><div class="n">326</div><div class="l">本月單據</div></div><div class="stat"><div class="n">12 hr</div><div class="l">省下彙整工時</div></div><div class="stat"><div class="n">3 筆</div><div class="l">待你處理</div></div></div><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>林大文・報帳 $3,200</b><small>發票缺統編，無法入帳</small></div><span class="chip alert">待補件</span></div><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>陳怡君・加班 4 hr</b><small>時數與打卡紀錄對不上</small></div><span class="chip wait">待確認</span></div><div class="urow in" style="opacity:1;transform:none;margin-bottom:0"><div class="ut"><b>王小美・特休 1 天</b><small>6 月特休已超額 0.5 天</small></div><span class="chip alert">請假異常</span></div>',tk);
+    if(!alive(tk))return;chatUser(sc,'這 3 筆我來跟他們確認');
+    await sleep(500);if(!alive(tk))return;t=chatTyping(sc);await sleep(1000);if(!alive(tk))return;t.remove();
+    chatAi(sc,'好。其餘 323 筆已核對無誤、可直接匯出薪資系統；要你裁量的我都標出來了。');
   }
 
   // 老闆：儀表板 count-up + 進度條
@@ -557,10 +558,10 @@
     await sleep(700);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
     chatAi(sc,'幫你開儀表板看 👇');
     await sleep(500);if(!alive(tk))return;
-    await showPanel(modal,'全公司流程儀表板','<div class="stat-row"><div class="stat"><div class="n">1,280</div><div class="l">本月處理單</div></div><div class="stat"><div class="n">4 hr</div><div class="l">平均簽核</div></div><div class="stat"><div class="n">8%</div><div class="l">人工把關</div></div></div><div class="barrow"><span class="bl">業務部</span><span class="bt"><span class="bf" style="width:78%"></span></span><span class="bv">78%</span></div><div class="barrow"><span class="bl">工程部</span><span class="bt"><span class="bf" style="width:54%"></span></span><span class="bv">54%</span></div><div class="barrow" style="margin-bottom:0"><span class="bl">行政部</span><span class="bt"><span class="bf" style="width:95%"></span></span><span class="bv">95%</span></div>',tk);
-    if(!alive(tk))return;chatUser(sc,'送出會不會出錯？');
+    await showPanel(modal,'全公司流程儀表板','<div class="stat-row"><div class="stat"><div class="n">1,280</div><div class="l">本月處理單</div></div><div class="stat"><div class="n">4 hr</div><div class="l">平均簽核</div></div><div class="stat"><div class="n">13 張</div><div class="l">逾時卡關</div></div></div><div style="font-size:12.5px;color:var(--text-2);font-weight:600;margin-bottom:11px">逾時卡關單・卡在哪個部門</div><div class="barrow"><span class="bl">工程部</span><span class="bt"><span class="bf" style="width:100%;background:var(--caution)"></span></span><span class="bv">11 張</span></div><div class="barrow"><span class="bl">業務部</span><span class="bt"><span class="bf" style="width:18%;background:var(--earth-500)"></span></span><span class="bv">2 張</span></div><div class="barrow" style="margin-bottom:0"><span class="bl">行政部</span><span class="bt"><span class="bf" style="width:4%;background:var(--air-500)"></span></span><span class="bv">0 張</span></div>',tk);
+    if(!alive(tk))return;chatUser(sc,'工程部怎麼卡這麼多？送出會不會出錯？');
     await sleep(700);if(!alive(tk))return;t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
-    chatAi(sc,'送出都是人按的，AI 只負責填好；其中 8% 經人工把關，每張單全程留紀錄、可追溯。');
+    chatAi(sc,'我已把那 11 張卡在哪一關列給你；送出都是人按的，AI 只負責填好、把卡住的單挑出來提醒你，每張單全程留紀錄、可追溯。');
   }
 
   const players=[playEmployee,playManager,playHR,playBoss];
