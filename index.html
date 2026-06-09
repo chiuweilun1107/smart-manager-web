@@ -162,6 +162,7 @@
   .mform-row{display:flex;justify-content:space-between;font-size:14px;padding:7px 0;border-bottom:1px solid var(--surface-muted)}
   .mform-row:last-of-type{border-bottom:0}
   .mform-row .k{color:var(--muted)}.mform-row .v{font-weight:600;color:var(--text)}
+  .mform-alert{margin-top:12px;padding:10px 12px;background:#fdeae8;border-left:3px solid var(--caution);border-radius:6px;font-size:13px;line-height:1.5;color:var(--caution-700);font-weight:500}
   .sign-area{margin-top:14px;border:1px dashed var(--border);border-radius:10px;padding:12px 14px;position:relative;min-height:80px;background:var(--surface-muted)}
   .sign-area .sl{font-size:12px;color:var(--muted)}
   .sign-svg{width:130px;height:42px;margin-top:4px;display:block}
@@ -476,7 +477,7 @@
   }
   function fillModal(modal,data){
     modal.querySelector('.modal-head').textContent=data.title;
-    modal.querySelector('.modal-body').innerHTML='<div class="mform">'+data.rows.map(r=>'<div class="mform-row"><span class="k">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>').join('')+'</div><div class="modal-action"></div>';
+    modal.querySelector('.modal-body').innerHTML='<div class="mform">'+data.rows.map(r=>'<div class="mform-row"><span class="k">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>').join('')+'</div>'+(data.alert?'<div class="mform-alert">⚠ '+data.alert+'</div>':'')+'<div class="modal-action"></div>';
   }
   async function showPanel(modal,title,bodyHTML,tk){
     modal.querySelector('.modal-head').textContent=title;
@@ -514,7 +515,7 @@
     const modal=ensureModal();modal.classList.remove('show');
     chatUser(sc,'今天有哪些單要我簽？');
     await sleep(700);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
-    chatAi(sc,'有 <b>3 張</b>待簽，附件都已查核。請逐張開單簽核 👇');
+    chatAi(sc,'有 <b>3 張</b>待簽，附件都已查核；其中 <b>1 張金額較高</b>我幫你標出來了。請逐張開單簽核 👇');
     await sleep(400);if(!alive(tk))return;
     const card=chatAi(sc,'<div class="c-card" style="max-width:340px"><div class="cc-head">待我簽核 (3)</div><div class="cc-body" id="mgr-list"></div></div>');
     const list=card.querySelector('#mgr-list');
@@ -524,7 +525,7 @@
     const forms=[
       {title:'請假申請單 · 陳怡君',rows:[['假別','特休'],['日期','2026/06/11（三）'],['天數','1 天'],['代理人','王大明'],['事由','個人事務']]},
       {title:'報帳請款單 · 林大文',rows:[['項目','客戶招待餐費'],['金額','$3,200'],['日期','2026/06/05'],['附件','發票 ×3'],['備註','已附統編']]},
-      {title:'採購申請單 · 王小美',rows:[['品項','辦公文具一批'],['金額','$5,800'],['數量','1 批'],['用途','部門耗材'],['預計到貨','2026/06/15']]}
+      {title:'採購申請單 · 王小美',rows:[['品項','設計部繪圖工作站 ×1'],['金額','$48,000'],['數量','1 台'],['用途','新進設計師設備'],['預計到貨','2026/06/20']],alert:'此筆 $48,000 超過 4 萬，已超出部門當月剩餘預算（$12,000），並達主管核決上限——請確認後再簽。'}
     ];
     await sleep(700);if(!alive(tk))return;
     for(let i=0;i<rows.length;i++){if(!alive(tk))return;
