@@ -289,7 +289,7 @@
         <button class="sol-item active" data-sol="0"><span class="sol-role">員工</span><span class="sol-pain">不知道填哪張表、單子送出後石沉大海、不知卡在誰那</span></button>
         <button class="sol-item" data-sol="1"><span class="sol-role">主管</span><span class="sol-pain">待簽塞滿、急件雜在一堆小單裡，逐張看太花時間，忙起來常只能橡皮章全按</span></button>
         <button class="sol-item" data-sol="2"><span class="sol-role">HR / 行政</span><span class="sol-pain">月底差勤、報帳逐筆人工對帳重 key，還要抓填錯、回一堆「我的單到哪」</span></button>
-        <button class="sol-item" data-sol="3"><span class="sol-role">老闆</span><span class="sol-pain">超支、浮報、卡關都等月底才爆出來，看不到流程卡在哪、決策慢半拍</span></button>
+        <button class="sol-item" data-sol="3"><span class="sol-role">經營者</span><span class="sol-pain">超支、浮報、卡關都等月底才爆出來，看不到流程卡在哪、決策慢半拍</span></button>
       </div>
       <div class="sol-panel">
         <!-- 0 員工：對話自動填表 -->
@@ -313,10 +313,10 @@
             <div class="cbody" id="hr-chat"></div>
           </div>
         </div>
-        <!-- 3 老闆：對話式 -->
+        <!-- 3 經營者：對話式 -->
         <div class="sol-ui" data-ui="3">
           <div class="appwin chatwin">
-            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">智慧精靈 · 幫老闆看全局</span></div>
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">智慧精靈 · 幫經營者看全局</span></div>
             <div class="cbody" id="boss-chat"></div>
           </div>
         </div>
@@ -556,7 +556,7 @@
     chatAi(sc,'<div class="c-card" style="max-width:360px"><div class="cc-head">要你裁量的 3 筆</div><div class="cc-body"><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>林大文・報帳 $3,200</b><small>發票缺統編，無法入帳</small></div><span class="chip alert">待補件</span></div><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>陳怡君・加班 4 hr</b><small>時數與打卡紀錄對不上</small></div><span class="chip wait">待確認</span></div><div class="urow in" style="opacity:1;transform:none;margin-bottom:0"><div class="ut"><b>王小美・特休 1 天</b><small>6 月特休已超額 0.5 天</small></div><span class="chip alert">請假異常</span></div></div></div>');
   }
 
-  // 老闆：儀表板 count-up + 進度條
+  // 經營者：儀表板 count-up + 進度條
   async function playBoss(tk){
     const sc=document.getElementById('boss-chat');sc.innerHTML='';const modal=ensureModal();modal.classList.remove('show');await sleep(300);if(!alive(tk))return;
     chatUser(sc,'公司流程現在跑得怎樣？');
@@ -564,9 +564,13 @@
     chatAi(sc,'幫你開儀表板看 👇');
     await sleep(500);if(!alive(tk))return;
     await showPanel(modal,'全公司流程儀表板','<div class="stat-row"><div class="stat"><div class="n">1,280</div><div class="l">本月處理單</div></div><div class="stat"><div class="n">4 hr</div><div class="l">平均簽核</div></div><div class="stat"><div class="n">13 張</div><div class="l">逾時卡關</div></div></div><div style="font-size:12.5px;color:var(--text-2);font-weight:600;margin-bottom:11px">逾時卡關單・卡在哪個部門</div><div class="barrow"><span class="bl">工程部</span><span class="bt"><span class="bf" style="width:100%;background:var(--caution)"></span></span><span class="bv">11 張</span></div><div class="barrow"><span class="bl">業務部</span><span class="bt"><span class="bf" style="width:18%;background:var(--earth-500)"></span></span><span class="bv">2 張</span></div><div class="barrow" style="margin-bottom:0"><span class="bl">行政部</span><span class="bt"><span class="bf" style="width:4%;background:var(--air-500)"></span></span><span class="bv">0 張</span></div>',tk);
-    if(!alive(tk))return;chatUser(sc,'工程部怎麼卡這麼多？送出會不會出錯？');
+    if(!alive(tk))return;chatUser(sc,'最近有什麼異常嗎？');
     await sleep(700);if(!alive(tk))return;t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
-    chatAi(sc,'我已把那 11 張卡在哪一關列給你；送出都是人按的，AI 只負責填好、把卡住的單挑出來提醒你，每張單全程留紀錄、可追溯。');
+    chatAi(sc,'挑出 3 筆要你留意的 👇');
+    await sleep(500);if(!alive(tk))return;
+    chatAi(sc,'<div class="c-card" style="max-width:360px"><div class="cc-head">近期異常 (3)</div><div class="cc-body"><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>採購・繪圖工作站 $48,000</b><small>超出工程部當月剩餘預算（$12,000）</small></div><span class="chip alert">超預算</span></div><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>報帳・同一廠商連 3 筆</b><small>短期重複請款，建議查核</small></div><span class="chip alert">疑似浮報</span></div><div class="urow in" style="opacity:1;transform:none;margin-bottom:0"><div class="ut"><b>工程部・連續加班 6 人</b><small>本月加班時數逼近勞基法上限</small></div><span class="chip wait">工時提醒</span></div></div></div>');
+    await sleep(500);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
+    chatAi(sc,'送出、核准都是人按的，AI 只負責把異常挑出來提醒你，每張單全程留紀錄、可追溯。');
   }
 
   const players=[playEmployee,playManager,playHR,playBoss];
