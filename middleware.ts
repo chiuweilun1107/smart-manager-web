@@ -1,8 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-// Hoist module-level constant so it parses once at cold start, not per request
-const supabaseRef = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -11,6 +8,9 @@ export function middleware(request: NextRequest) {
   if (bypassToken && process.env.AUDIT_BYPASS_TOKEN && bypassToken === process.env.AUDIT_BYPASS_TOKEN) {
     return NextResponse.next()
   }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseRef = supabaseUrl ? new URL(supabaseUrl).hostname.split('.')[0] : ''
 
   const raw = request.cookies.get(`sb-${supabaseRef}-auth-token`)?.value
     ?? (request.cookies.get(`sb-${supabaseRef}-auth-token.0`)?.value ?? '')
