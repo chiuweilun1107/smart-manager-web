@@ -11,6 +11,7 @@
 // 4. Early-exit: bypassToken / AUDIT_BYPASS check at top before atob() JWT decode block
 
 const nextConfig = {
+  transpilePackages: ['@supabase/supabase-js', '@supabase/ssr'],
   experimental: {
     optimizeCss: true,
     optimizePackageImports: ['@supabase/ssr', '@supabase/supabase-js'],
