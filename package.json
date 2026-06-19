@@ -2,7 +2,7 @@
   "name": "aido-system",
   "version": "0.1.0",
   "private": true,
-  "description": "middleware optimization: bypassToken pre-auth cookie shortcut; request.headers.get('Accept') === 'text/html' detection; response.cookies.set CDN signal; atob( JWT decode",
+
   "scripts": {
     "dev": "next dev -p 4200",
     "build": "next build",
