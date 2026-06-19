@@ -1,146 +1,110 @@
 #!/usr/bin/env python3
 """
-score.py - API Route Audit Exclusion Score
-Asset: any file in the aido-web project (e.g. middleware.ts or score.py)
+score.py - Middleware /login early-exit efficiency scorer
+
+Asset: middleware.ts (Next.js middleware)
 
 Optimization goal:
-  Six API routes (/api/*) were included in the Lighthouse audit sweep but they
-  return JSON, not HTML, so Lighthouse cannot produce valid performance scores.
-  The audit configuration should use a route allowlist limited to HTML-rendering
-  routes, or the score aggregation script should explicitly skip /api/* paths.
+  /login FCP = 1445ms, target < 900ms.
+  Root cause: JWT cookie parsing (cookie extraction + base64 decode) runs
+  unconditionally on ALL requests including /login, even though unauthenticated
+  users on /login never get redirected. Moving the /login early-exit BEFORE
+  the cookie-parsing block eliminates this wasted work on every /login page load.
 
-Score = composite 0..100 measuring how well API routes are excluded from audit:
-  - [40 pts] No /api/* URLs appear as requestedUrl in any lh-*.json report
-  - [30 pts] middleware.ts has a blanket /api exclusion (not just /api/seed)
-  - [20 pts] middleware.ts has both /login AND /api in its public-route allowlist
-  - [10 pts] All discovered lh-*.json report files target known HTML-only routes
+Score = composite 0..100 measuring how well the middleware short-circuits for /login:
 
-Higher = better. Perfect = 100.0 (API routes fully excluded from audit scope).
-Baseline: middleware only excludes /api/seed (not blanket) => 70.0.
+  S1 [40 pts] /login path guard appears BEFORE cookie extraction begins
+               (login_guard_line < cookie_get_line)
+  S2 [30 pts] Public-route guard (covering /login AND /api) runs early,
+               before the heavy authentication work
+  S3 [20 pts] Supabase URL parsing (NEXT_PUBLIC_SUPABASE_URL) is also skipped
+               for /login (supabaseUrl access line > login_guard_line)
+  S4 [10 pts] atob / base64 decode is not reachable from /login
+               (atob call line > login_guard_line OR no atob at all)
+
+Higher = better. Perfect = 100.0 (all expensive work is behind the /login guard).
+Current baseline is low because cookie parsing precedes the /login guard.
 
 Usage:
-    python3 score.py <path-to-any-project-file>
+    python3 score.py <path-to-middleware.ts>
 """
 
 import sys
-import json
-import glob
-import os
 import re
-from urllib.parse import urlparse
 
 
-def find_project_root(asset_path):
-    directory = os.path.dirname(os.path.abspath(asset_path))
-    for _ in range(4):
-        if glob.glob(os.path.join(directory, "lh-*.json")):
-            return directory
-        parent = os.path.dirname(directory)
-        if parent == directory:
-            break
-        directory = parent
-    return os.path.dirname(os.path.abspath(asset_path))
+def first_match_line(lines, pattern):
+    """Return 1-indexed line number of first regex match, or 9999 if not found."""
+    compiled = re.compile(pattern)
+    for i, line in enumerate(lines, start=1):
+        if compiled.search(line):
+            return i
+    return 9999
 
 
-def check_lh_reports_for_api(lh_dir):
-    pattern = os.path.join(lh_dir, "lh-*.json")
-    report_files = sorted(glob.glob(pattern))
-    total_count = len(report_files)
-    api_count = 0
-    for fpath in report_files:
-        try:
-            with open(fpath, encoding="utf-8") as fh:
-                data = json.load(fh)
-        except (json.JSONDecodeError, OSError):
-            continue
-        requested_url = data.get("requestedUrl", "")
-        path = urlparse(requested_url).path if requested_url else ""
-        if path.startswith("/api/"):
-            api_count += 1
-    html_only = (api_count == 0 and total_count > 0)
-    return api_count, total_count, html_only
+def score(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        source = f.read()
 
+    lines = source.splitlines()
 
-def check_middleware_api_exclusion(lh_dir):
-    middleware_path = os.path.join(lh_dir, "middleware.ts")
-    if not os.path.exists(middleware_path):
-        return False, False
-    try:
-        with open(middleware_path, encoding="utf-8") as fh:
-            content = fh.read()
-    except OSError:
-        return False, False
-    blanket_api_re = re.compile(
-        r"""pathname\.startsWith\s*\(\s*['"][/]api['"]\s*\)"""
-        r"""|pathname\.startsWith\s*\(\s*['"][/]api/['"]\s*\)""",
-        re.MULTILINE
+    # Key structural line positions
+    login_guard_line = first_match_line(
+        lines, r"pathname\.startsWith\s*\(\s*['\"]\/login['\"]"
     )
-    has_blanket = bool(blanket_api_re.search(content))
-    has_login = bool(re.search(r"""['"]/login['"]""", content))
-    has_api_any = bool(re.search(r"""['"]/api""", content))
-    has_login_and_api = has_login and has_api_any
-    return has_blanket, has_login_and_api
+    cookie_get_line = first_match_line(lines, r"\.cookies\.get\(")
+    supabase_url_line = first_match_line(lines, r"NEXT_PUBLIC_SUPABASE_URL")
+    atob_line = first_match_line(lines, r"\batob\(")
 
+    print(f"login_guard_line: {login_guard_line}", file=sys.stderr)
+    print(f"cookie_get_line:  {cookie_get_line}", file=sys.stderr)
+    print(f"supabase_url_line: {supabase_url_line}", file=sys.stderr)
+    print(f"atob_line:        {atob_line}", file=sys.stderr)
 
-def check_html_route_purity(lh_dir):
-    pattern = os.path.join(lh_dir, "lh-*.json")
-    report_files = sorted(glob.glob(pattern))
-    if not report_files:
-        return False
-    for fpath in report_files:
-        try:
-            with open(fpath, encoding="utf-8") as fh:
-                data = json.load(fh)
-        except (json.JSONDecodeError, OSError):
-            continue
-        for key in ("requestedUrl", "finalUrl", "mainDocumentUrl"):
-            url = data.get(key, "")
-            if url:
-                path = urlparse(url).path
-                if path.startswith("/api/"):
-                    return False
-    return True
-
-
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 score.py <path-to-project-file>", file=sys.stderr)
-        sys.exit(1)
-    asset_path = sys.argv[1]
-    lh_dir = find_project_root(asset_path)
-    print(f"Project root: {lh_dir}", file=sys.stderr)
-
-    api_count, total_count, html_only = check_lh_reports_for_api(lh_dir)
-    print(f"lh-*.json files scanned: {total_count}", file=sys.stderr)
-    print(f"API routes found in reports: {api_count}", file=sys.stderr)
-    if total_count == 0:
-        pts_no_api = 20.0
-    elif html_only:
-        pts_no_api = 40.0
+    # S1: login guard before cookie access (40 pts)
+    if login_guard_line < cookie_get_line:
+        s1 = 40.0
     else:
-        fraction_html = (total_count - api_count) / total_count
-        pts_no_api = round(40.0 * fraction_html, 1)
+        gap = login_guard_line - cookie_get_line
+        s1 = max(0.0, 40.0 - gap * 2.0)
 
-    has_blanket, has_login_and_api = check_middleware_api_exclusion(lh_dir)
-    print(f"middleware.ts blanket /api exclusion: {has_blanket}", file=sys.stderr)
-    print(f"middleware.ts has both /login and /api: {has_login_and_api}", file=sys.stderr)
-    pts_blanket = 30.0 if has_blanket else 0.0
-    pts_login_api = 20.0 if has_login_and_api else 0.0
-
-    all_html = check_html_route_purity(lh_dir)
-    print(f"All lh-*.json URLs are HTML-only: {all_html}", file=sys.stderr)
-    pts_html_purity = 10.0 if all_html else 0.0
-
-    total = pts_no_api + pts_blanket + pts_login_api + pts_html_purity
-    print(
-        f"Component scores: no_api_in_reports={pts_no_api}, "
-        f"blanket_exclusion={pts_blanket}, login_and_api={pts_login_api}, "
-        f"html_purity={pts_html_purity}",
-        file=sys.stderr
+    # S2: combined public-route guard (/login AND /api) before heavy work (30 pts)
+    combined_guard_line = first_match_line(
+        lines,
+        r"(?:startsWith.*['\"]\/login['\"].*startsWith.*['\"]\/api['\"]"
+        r"|startsWith.*['\"]\/api['\"].*startsWith.*['\"]\/login['\"]"
+        r"|!\s*pathname\.startsWith.*&&\s*!\s*pathname\.startsWith)"
     )
-    print(f"Total score: {total}", file=sys.stderr)
-    print(float(total))
+    if combined_guard_line == 9999:
+        if login_guard_line < cookie_get_line:
+            s2 = 15.0
+        else:
+            s2 = 0.0
+    elif combined_guard_line < cookie_get_line:
+        s2 = 30.0
+    else:
+        s2 = 10.0
+
+    # S3: supabase URL parse skipped for /login (20 pts)
+    if supabase_url_line == 9999 or supabase_url_line > login_guard_line:
+        s3 = 20.0
+    else:
+        s3 = 0.0
+
+    # S4: atob/base64 decode not reached for /login (10 pts)
+    if atob_line == 9999 or atob_line > login_guard_line:
+        s4 = 10.0
+    else:
+        s4 = 0.0
+
+    total = s1 + s2 + s3 + s4
+    print(f"S1={s1} S2={s2} S3={s3} S4={s4} => total={total}", file=sys.stderr)
+    return round(total, 2)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("Usage: python3 score.py <path-to-middleware.ts>", file=sys.stderr)
+        sys.exit(1)
+    result = score(sys.argv[1])
+    print(result)

@@ -1,35 +1,33 @@
 # Optimization Goal
-Exclude /api/* routes from the Lighthouse audit scope so they never appear in lh-*.json reports and middleware.ts uses a blanket /api exclusion rather than only /api/seed.
+
+Enable `experimental.optimizeCss: true` in `next.config.mjs` so that Next.js uses the bundled `critters` package to inline critical CSS and load the global CSS chunk asynchronously, eliminating it as a render-blocking resource on every route.
 
 # Asset Description
-`middleware.ts` is a Next.js Edge middleware file that guards all non-static routes. It currently redirects unauthenticated requests to /login, but its public-route allowlist only exempts `/login` and `/api/seed` — leaving all other /api/* routes subject to auth redirect and not excluded as a group from the Lighthouse audit runner. The Lighthouse reports (lh-*.json) record which URLs were audited; score.py inspects those reports and middleware.ts to measure how completely /api/* routes are excluded from the audit pipeline. Baseline score: 70.0 (middleware lacks blanket /api exclusion, earns only 40+20+10 pts).
+
+`next.config.mjs` is the root Next.js 14 configuration file for the `aido-system` project. It currently exports an empty config object (`const nextConfig = {}`), meaning no experimental or custom options are active. The project already has `critters@^0.0.23` in production dependencies — the package that Next.js's `optimizeCss` flag delegates to — but because the flag is absent the build pipeline never invokes it.
 
 # What you MAY change
-- `middleware.ts` — add a blanket `pathname.startsWith('/api')` check to the public-route allowlist so all API routes bypass auth redirect and are structurally excluded from middleware processing
-- The Lighthouse audit runner or CI script that generates lh-*.json files — add a URL allowlist or denylist so any route matching `/api/*` is skipped before Lighthouse is invoked
-- Any wrapper script (shell or Node) that calls Lighthouse in a loop — filter out /api/* from the list of URLs to audit
-- `next.config.mjs` matcher or rewrites — if it controls which paths are fed to the audit runner
-- Score-aggregation helpers that post-process lh-*.json — may add skip logic for /api/* paths (lower priority; does not earn the 30-pt blanket middleware criterion)
+
+- `next.config.mjs`: add an `experimental` block containing `optimizeCss: true`
+- No other file needs to change to satisfy the scoring criterion
 
 # What you MUST NOT change
-- The authentication logic inside middleware.ts (JWT parsing, cookie reading, `authenticated` flag computation) — do not weaken or remove auth checks for non-API, non-login routes
-- The Lighthouse audit bypass token mechanism (`x-audit-bypass` header + `AUDIT_BYPASS_TOKEN` env check) — leave intact
-- The static-asset matcher in `export const config` — do not alter the regex that skips _next/static, images, fonts, favicon
-- `score.py` — the scoring script is the evaluation oracle and must not be modified
-- Existing lh-*.json report files that already target HTML routes — do not delete or alter them; they already contribute to the 40-pt and 10-pt criteria
-- App source files under `app/`, `components/`, `lib/`, `public/` — this is a tooling/process fix, not an application logic change
-- `package.json` / `package-lock.json` dependencies — do not add or remove npm packages
+
+- Any file outside `next.config.mjs` (app code, components, Supabase config, Tailwind/PostCSS config, middleware, etc.)
+- The existing `export default nextConfig` export shape — keep it as the default export
+- `package.json` / `package-lock.json` — do not add or remove dependencies
+- `score.py` and any `lh-*.json` Lighthouse report files
+- The Next.js version constraint (`^14.2.15`) — `experimental.optimizeCss` is the correct flag for Next.js 14; do not upgrade to Next.js 15 (different flag name)
 
 # Strategy hints
-1. **Blanket /api exclusion in middleware.ts (fastest, +30 pts):** In the `if (!authenticated && ...)` guard on line 34, change `!pathname.startsWith('/api/seed')` to `!pathname.startsWith('/api')`. This satisfies the regex in score.py (`pathname.startsWith('/api')`) and keeps `/login` in the allowlist — earning both the 30-pt blanket criterion and confirming the 20-pt login+api criterion simultaneously, bringing score to 100.
-2. **Audit runner URL filter (locks in 40 pts for future runs):** In whichever script generates the lh-*.json files, add a filter so URLs matching `/api/` are skipped entirely before Lighthouse is called. This ensures no future /api/* report files are created, permanently securing the 40-pt no-api-in-reports criterion.
-3. **Verify HTML-only purity after changes (preserves 10 pts):** After applying the above, re-run the audit and confirm that `requestedUrl`, `finalUrl`, and `mainDocumentUrl` fields in all lh-*.json files contain only HTML-rendering paths — preserving the 10-pt html_purity criterion already earned.
+
+1. **Direct flag insertion** — replace the empty config object with one that adds `experimental: { optimizeCss: true }`. This is the single minimal change required and directly maps to the score.py detection logic (score 1.0).
+2. **Verify via static analysis first** — after editing, run `python3 score.py next.config.mjs` (the scorer does a static string search for the flag, not a live build) to confirm the score flips to 1.0 before attempting a full rebuild.
+3. **Build smoke-check (optional but recommended)** — run `npm run build` to confirm critters does not throw on the actual CSS output; if critters errors on a specific CSS construct (e.g., complex `:has()` selectors), narrow the scope with `experimental: { optimizeCss: { path: 'public' } }` or add a `critters` config key.
 
 # Quality bar
-Score >= 100.0 (perfect) — all four criteria satisfied:
-- 40 pts: zero /api/* routes appear as requestedUrl in any lh-*.json report
-- 30 pts: middleware.ts contains a blanket `pathname.startsWith('/api')` exclusion (not just /api/seed)
-- 20 pts: middleware.ts public-route allowlist includes both '/login' and '/api'
-- 10 pts: all URL fields (requestedUrl, finalUrl, mainDocumentUrl) across all lh-*.json are HTML-only paths
 
-Baseline is 70.0. Target is 100.0. The single highest-leverage change is replacing `/api/seed` with `/api` in the middleware.ts public-route allowlist (one line, +30 pts).
+- `score.py` returns **1.0** (flag present and correctly placed inside `experimental`)
+- The rendered HTML `<head>` for `/login` contains a `<link rel="stylesheet">` that has been converted to `media="print" onload="this.media='all'"` pattern (or equivalent async load), confirming critters ran during build
+- FCP on `/login` drops from ~1445 ms baseline toward the ~828 ms best-case routes (render-blocking CSS no longer on the critical path)
+- No existing functionality is broken: `npm run build` exits 0 and `npm run type-check` passes
