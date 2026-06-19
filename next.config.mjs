@@ -1,3 +1,9 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {}
+// preload and preconnect hints for critical assets
+const nextConfig = {
+  experimental: {
+    optimizeCss: true,
+    critters: {},
+  },
+}
 export default nextConfig

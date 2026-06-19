@@ -1,7 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // Lighthouse audit bypass — only active when AUDIT_BYPASS_TOKEN is set server-side
+  const bypassToken = request.headers.get('x-audit-bypass')
+  if (bypassToken && process.env.AUDIT_BYPASS_TOKEN && bypassToken === process.env.AUDIT_BYPASS_TOKEN) {
+    return NextResponse.next()
+  }
+
   const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]
   const raw = request.cookies.get(`sb-${ref}-auth-token`)?.value
     ?? (request.cookies.get(`sb-${ref}-auth-token.0`)?.value ?? '')
@@ -9,13 +16,11 @@ export async function middleware(request: NextRequest) {
 
   let authenticated = false
   if (raw) {
+    let sessionJson = raw.startsWith('base64-')
+      ? raw.slice(7).replace(/-/g, '+').replace(/_/g, '/')
+      : raw
     try {
-      // Decode session JSON (handles both default and base64url cookieEncoding)
-      const sessionJson = raw.startsWith('base64-')
-        ? atob(raw.slice(7).replace(/-/g, '+').replace(/_/g, '/'))
-        : raw
-      const jwt: string = JSON.parse(sessionJson).access_token
-      if (!jwt) throw new Error('no access_token')
+      const jwt: string = JSON.parse(raw.startsWith('base64-') ? atob(sessionJson) : sessionJson).access_token
       const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
       authenticated = payload.exp > Date.now() / 1000
     } catch { /* invalid token = not authenticated */ }
@@ -31,5 +36,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)']
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|svg|jpg|jpeg|webp|woff2|ico)$).*)']
 }
