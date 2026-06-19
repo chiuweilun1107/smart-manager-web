@@ -1,35 +1,36 @@
 # Optimization Goal
-Eliminate @supabase/ssr from middleware.ts and replace with native next/server cookie reads + lightweight JWT decode to shrink Edge Runtime bundle size and remove Edge-incompatible patterns.
+Activate the AUDIT_BYPASS_TOKEN mechanism in middleware.ts so Lighthouse can reach /approvals, /dashboard, and /notifications as authenticated pages instead of being redirected to /login, producing performance scores that reflect actual page content.
 
 # Asset Description
-`middleware.ts` is a Next.js Edge Runtime middleware that guards all routes except static assets. It currently uses `createServerClient` from `@supabase/ssr` to call `supabase.auth.getUser()`, which makes a network round-trip to Supabase and pulls in a heavy SDK that references Node.js `process.version` — incompatible with the Edge Runtime. The middleware enforces two redirect rules: unauthenticated users are sent to `/login`; authenticated users already on `/login` are bounced to `/dashboard`.
+`middleware.ts` is a Next.js Edge Runtime middleware that guards all protected routes. It reads a Supabase session JWT from cookies and redirects unauthenticated requests to `/login`. It already contains an AUDIT_BYPASS_TOKEN bypass: when the `x-audit-bypass` request header matches the `AUDIT_BYPASS_TOKEN` environment variable, the middleware calls `NextResponse.next()` immediately without checking authentication. This bypass was present but inactive during all Lighthouse runs because `AUDIT_BYPASS_TOKEN` was not set in the deployment environment, so every request to `/approvals`, `/dashboard`, and `/notifications` landed on `/login` instead.
 
 # What you MAY change
-- Replace `import { createServerClient } from '@supabase/ssr'` with lightweight alternatives (no import at all, or `jose`, or plain `atob`).
-- Replace `supabase.auth.getUser()` with a direct cookie read: Supabase stores the session JWT in a cookie named `sb-<project-ref>-auth-token` (base64url JSON) or split across `sb-<ref>-auth-token.0` / `.1` chunks.
-- Decode the JWT payload locally using `atob()` (available in Edge Runtime) or the `jose` package to verify expiry without a network call.
-- Reduce total line count — target ≤ 20 lines.
-- Remove the `supabaseResponse` pattern (cookie forwarding) if it is no longer needed once the SDK is gone.
-- Keep or inline the `config.matcher` export unchanged.
+- Set (or ensure) the `AUDIT_BYPASS_TOKEN` environment variable is present in the deployment environment (e.g., Vercel environment variables) so the bypass condition `process.env.AUDIT_BYPASS_TOKEN` evaluates to truthy.
+- Adjust the bypass check logic in middleware.ts if the current implementation has gaps — e.g., the header comparison uses `===` which requires an exact token match; ensure the token value used by the Lighthouse runner matches what the env var is set to.
+- Extend the bypass to also skip the authenticated-on-login redirect (line 32–33) so a bypass request to `/login` is not bounced away.
+- Add or update the Lighthouse runner configuration to inject `x-audit-bypass: <token>` as an extra HTTP header when auditing protected routes.
+- Update `lh-approvals.json`, `lh-dashboard.json`, and `lh-notifications.json` by re-running Lighthouse with the bypass header active, so the JSON reports reflect actual page content (finalUrl matches requestedUrl, no runWarning about redirect).
 
 # What you MUST NOT change
-- The two redirect invariants must be preserved exactly:
+- The two core redirect invariants must be preserved for all non-bypass requests:
   1. Unauthenticated user on any route except `/login` and `/api/seed` → redirect to `/login`.
   2. Authenticated user on `/login` → redirect to `/dashboard`.
-- The `config.matcher` pattern `['/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)']` must remain identical.
-- The middleware must remain an Edge Runtime function (no `export const runtime = 'nodejs'`).
-- Do not break the `/api/seed` bypass.
-- Do not introduce server-side secrets or hard-coded project refs that differ between environments — read from `process.env.NEXT_PUBLIC_SUPABASE_URL` if a project ref is needed (it can be parsed from the URL).
+- The `config.matcher` pattern must remain identical — do not alter which routes the middleware covers.
+- The middleware must remain an Edge Runtime function; do not add `export const runtime = 'nodejs'`.
+- Do not hard-code auth tokens or session cookies — the bypass must be header+env-var gated, not open to the public.
+- Do not remove the bypass guard (`bypassToken === process.env.AUDIT_BYPASS_TOKEN`); the bypass must require a secret token match, not just any header value.
+- Do not break the `/api/seed` route exemption.
+- The cookie-based authentication logic (JWT decode from `sb-<ref>-auth-token`) must remain correct for normal (non-bypass) requests.
 
 # Strategy hints
-1. **Cookie-direct + atob decode (zero new deps):** Read `request.cookies.get('sb-<ref>-auth-token')` (or iterate all cookies matching `sb-*-auth-token`), base64url-decode the JWT payload with `atob()`, and check `exp > Date.now()/1000`. This uses only `next/server` — no extra imports, max score bonus.
-2. **Parse project ref from env URL:** Derive the Supabase project ref with `new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]` to build the exact cookie name dynamically, avoiding hard-coding.
-3. **Guard against split cookies:** Supabase `@supabase/ssr` v0.5+ may split large tokens across `.0` / `.1` suffixes; concatenate them before decoding if `sb-<ref>-auth-token` is absent but `.0` is present.
+1. **Set AUDIT_BYPASS_TOKEN in Vercel and re-run Lighthouse with the header:** Add `AUDIT_BYPASS_TOKEN=<random-secret>` to the Vercel project environment variables, then re-run each Lighthouse audit with `--extra-headers '{"x-audit-bypass":"<secret>"}'`. The middleware bypass check on lines 7–10 will pass and the actual page will render.
+2. **Verify the bypass covers both redirect branches:** The current bypass (line 9: `return NextResponse.next()`) skips the unauthenticated redirect but the authenticated-on-login redirect on lines 32–33 is after the bypass return, so it is already unreachable for bypass requests — confirm this is correct by tracing the control flow.
+3. **Update Lighthouse JSON reports after bypass is active:** Replace `lh-approvals.json`, `lh-dashboard.json`, and `lh-notifications.json` with new runs where `requestedUrl === finalUrl` and `runWarnings` is empty. The score.py reads these files; accurate reports are prerequisites for a meaningful score.
 
 # Quality bar
-- Score (score.py) >= 90 out of 100.
-- Zero imports from outside `next/server` (or at most `jose` if atob is insufficient — costs -5 but avoids -30/-20 from @supabase/ssr).
-- Total lines <= 25 (ideally <= 20).
-- No `@supabase/ssr` import.
-- No `createServerClient` usage.
-- Both redirect invariants pass a manual trace through the new logic.
+- All three protected-route Lighthouse JSON files have `finalUrl` matching `requestedUrl` (no redirect to `/login`).
+- `runWarnings` array is empty in each protected-route report.
+- Lighthouse performance scores for `/approvals`, `/dashboard`, and `/notifications` reflect actual page content, not the login page.
+- The bypass only activates when both conditions are true: header `x-audit-bypass` is present AND its value equals `process.env.AUDIT_BYPASS_TOKEN` (non-empty).
+- Normal unauthenticated browser requests (no bypass header) still redirect to `/login` — the auth wall is intact.
+- score.py mean across all four pages (login + 3 protected) is >= 0.5 once real page data is captured.
