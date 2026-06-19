@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-score.py — Legacy JavaScript Polyfill Waste Score
-Asset: tsconfig.json (ES2022 target config)
+score.py - Legacy JavaScript Polyfill Waste Score
+Asset: tsconfig.json
 
-Optimization goal: 0 bytes wasted on native-supported polyfills.
-tsconfig already sets target=ES2022; the fix must eliminate the
-third-party bundler override that ships polyfills for:
-  Array.prototype.at/flat/flatMap, Object.fromEntries/hasOwn,
-  String.prototype.trimStart/trimEnd
+Optimization goal:
+  Despite tsconfig target=ES2022, chunk 117-9bcfe95f89d4b2e1.js ships polyfills
+  for seven ES2019-ES2022 methods (Array.at/flat/flatMap, Object.fromEntries/hasOwn,
+  String.trimStart/trimEnd) that are natively supported in all ES2022+ browsers.
+  Lighthouse flags this as legacy-javascript-insight with ~11.4 kB wasted per route.
 
-Score = -(total wastedBytes from legacy-javascript-insight across all lh-*.json)
-  Higher is better; perfect = 0.0 (no polyfill waste on any route).
-  Baseline: -11669 * 7 routes = -81683
+Score = -(total wastedBytes from legacy-javascript-insight across all lh-*.json reports)
+  Higher is better. Perfect = 0.0 (no polyfill waste on any route).
+  Baseline: 11 routes x ~11,669 bytes = -128,395.
 
-If tsconfig.json target is NOT ES2022+, applies -50000 prerequisite penalty.
+Also checks tsconfig target: if not ES2022+, applies -50,000 prerequisite penalty.
 
 Usage:
     python3 score.py <path-to-tsconfig.json>
@@ -27,7 +27,7 @@ import os
 ES2022_TARGETS = {"es2022", "es2023", "es2024", "es2025", "esnext"}
 
 
-def load_tsconfig(path):
+def load_json(path):
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -48,8 +48,7 @@ def polyfill_waste_bytes(lh_dir):
     total_wasted = 0
     for fpath in report_files:
         try:
-            with open(fpath, encoding="utf-8") as fh:
-                data = json.load(fh)
+            data = load_json(fpath)
         except (json.JSONDecodeError, OSError):
             continue
         audit = data.get("audits", {}).get("legacy-javascript-insight", {})
@@ -67,7 +66,7 @@ def main():
     lh_dir = os.path.dirname(os.path.abspath(asset_path))
 
     try:
-        tsconfig = load_tsconfig(asset_path)
+        tsconfig = load_json(asset_path)
     except (json.JSONDecodeError, OSError) as exc:
         print(f"ERROR reading tsconfig: {exc}", file=sys.stderr)
         sys.exit(1)
