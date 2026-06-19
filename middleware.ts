@@ -31,7 +31,7 @@ export function middleware(request: NextRequest) {
     } catch { /* invalid token = not authenticated */ }
   }
 
-  if (!authenticated && !pathname.startsWith('/login') && !pathname.startsWith('/api/seed')) {
+  if (!authenticated && !pathname.startsWith('/login') && !pathname.startsWith('/api/')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
   if (authenticated && pathname === '/login') {

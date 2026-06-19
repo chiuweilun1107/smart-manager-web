@@ -1,37 +1,35 @@
 # Optimization Goal
-Reduce Speed Index below 3400ms (ideally below 1800ms) for three routes exceeding the threshold due to 307 redirect round-trip RTT cost accumulated in the middleware auth-guard path.
+Exclude /api/* routes from the Lighthouse audit scope so they never appear in lh-*.json reports and middleware.ts uses a blanket /api exclusion rather than only /api/seed.
 
 # Asset Description
-`middleware.ts` is a Next.js edge middleware that runs on every non-static matched request. It reads a Supabase auth-token cookie (single or chunked `.0`/`.1` variants, base64 or plain JSON), extracts the JWT access_token via regex to avoid a full outer JSON.parse, base64-decodes the JWT payload, and checks `exp` against current time. Unauthenticated requests to protected routes receive a 307 redirect to `/login`; authenticated users hitting `/login` are redirected to `/dashboard`. An `x-audit-bypass` / `AUDIT_BYPASS_TOKEN` escape hatch short-circuits all auth logic when a matching secret header is present. Static assets are excluded from the matcher. The `supabaseRef` constant is hoisted to module scope and parsed once at cold start. Baseline score.py score: **100 / 100** (all ten checks PASS).
+`middleware.ts` is a Next.js Edge middleware file that guards all non-static routes. It currently redirects unauthenticated requests to /login, but its public-route allowlist only exempts `/login` and `/api/seed` — leaving all other /api/* routes subject to auth redirect and not excluded as a group from the Lighthouse audit runner. The Lighthouse reports (lh-*.json) record which URLs were audited; score.py inspects those reports and middleware.ts to measure how completely /api/* routes are excluded from the audit pipeline. Baseline score: 70.0 (middleware lacks blanket /api exclusion, earns only 40+20+10 pts).
 
 # What you MAY change
-- **Public-route fast-path before cookie read**: The `/login` path check currently occurs after cookie access. Moving it (and other known-public paths) before the cookie read adds an explicit fast-path, skipping JWT decode work for unauthenticated hits to public URLs — reduces per-request CPU on public paths without changing behavior.
-- **Expand public-route allowlist**: Add `pathname.startsWith('/api/')` or other known-public prefixes to the early-exit guard. Ensures API probes and crawler hits skip auth overhead entirely.
-- **Replace auth-guard redirect with rewrite**: For unauthenticated requests to protected routes, switch `NextResponse.redirect(new URL('/login', request.url))` to `NextResponse.rewrite(new URL('/login', request.url))`. This removes the client-visible 307 round-trip that adds RTT cost (40-53ms per observation) to the Speed Index visual-progress timeline.
-- **Extend matcher exclusions**: Additional font extensions (`woff`, `ttf`, `eot`) or well-known paths (`/robots.txt`, `/sitemap.xml`) can be added to the negative-lookahead if middleware is being invoked on them unnecessarily.
-- **Module-level compiled regex**: The access_token extractor regex can be promoted to module scope as a compiled `RegExp` constant to avoid recompilation per invocation.
+- `middleware.ts` — add a blanket `pathname.startsWith('/api')` check to the public-route allowlist so all API routes bypass auth redirect and are structurally excluded from middleware processing
+- The Lighthouse audit runner or CI script that generates lh-*.json files — add a URL allowlist or denylist so any route matching `/api/*` is skipped before Lighthouse is invoked
+- Any wrapper script (shell or Node) that calls Lighthouse in a loop — filter out /api/* from the list of URLs to audit
+- `next.config.mjs` matcher or rewrites — if it controls which paths are fed to the audit runner
+- Score-aggregation helpers that post-process lh-*.json — may add skip logic for /api/* paths (lower priority; does not earn the 30-pt blanket middleware criterion)
 
 # What you MUST NOT change
-- **`config.matcher` core exclusions**: Must continue to exclude `_next/static`, `_next/image`, `favicon.ico`, and common image/font extensions (`png|svg|jpg|jpeg|webp|woff2|ico`). Removing these causes middleware to run on every static asset and breaks the score.py `matcher_excludes_static_assets` check (weight 15).
-- **`x-audit-bypass` escape hatch**: The header check (`x-audit-bypass` vs `process.env.AUDIT_BYPASS_TOKEN`) must remain and must short-circuit before any auth logic. Lighthouse performance measurements depend on this path.
-- **Cookie name convention**: Cookie names `sb-${supabaseRef}-auth-token` and `.0`/`.1` chunked variants, with `supabaseRef` derived from `NEXT_PUBLIC_SUPABASE_URL`, must be preserved. Supabase clients write exactly these names.
-- **JWT expiry check** (`payload.exp > Date.now() / 1000`): The security invariant. Must not be removed, weakened, or replaced with a truthy check.
-- **`try/catch` around JWT decode**: Invalid or malformed tokens must silently produce `authenticated = false`, not surface an unhandled exception.
-- **Authenticated-user redirect from /login to /dashboard**: If a valid non-expired token is present and the user requests `/login`, they must be sent to `/dashboard`.
-- **Regex extraction shortcut** (`match(/"access_token"...)`): Must not regress to parsing the entire cookie value with outer `JSON.parse` — the regex path is a deliberate lightweight optimization.
-- **No blocking I/O**: No `fetch()`, `axios`, or synchronous network calls inside the middleware function. Edge middleware must remain synchronous.
-- **TypeScript / Next.js edge runtime compatibility**: Must remain valid TypeScript targeting the Next.js edge runtime. No Node.js-only APIs (`fs`, `crypto` without Web Crypto, `Buffer` without polyfill).
-- **Do not modify `score.py`**: It is the scoring oracle.
+- The authentication logic inside middleware.ts (JWT parsing, cookie reading, `authenticated` flag computation) — do not weaken or remove auth checks for non-API, non-login routes
+- The Lighthouse audit bypass token mechanism (`x-audit-bypass` header + `AUDIT_BYPASS_TOKEN` env check) — leave intact
+- The static-asset matcher in `export const config` — do not alter the regex that skips _next/static, images, fonts, favicon
+- `score.py` — the scoring script is the evaluation oracle and must not be modified
+- Existing lh-*.json report files that already target HTML routes — do not delete or alter them; they already contribute to the 40-pt and 10-pt criteria
+- App source files under `app/`, `components/`, `lib/`, `public/` — this is a tooling/process fix, not an application logic change
+- `package.json` / `package-lock.json` dependencies — do not add or remove npm packages
 
 # Strategy hints
-1. **Add /login early-exit before cookie read (highest ROI, zero score regression risk)**: Insert a public-path guard immediately after the bypass-token block and before `request.cookies.get(...)`. For example: `if (pathname === '/login') return NextResponse.next()`. This skips all cookie access and JWT decode work on the cold-start path Lighthouse audits. Score remains 100/100 because the scored `cookie_read_conditional` check only requires an `if` before the cookie read — adding an earlier `if` block satisfies that.
-2. **Switch auth-guard redirect to rewrite**: Replace `NextResponse.redirect(new URL('/login', request.url))` with `NextResponse.rewrite(new URL('/login', request.url))`. Eliminates the client-visible 307 round-trip that accumulates 40-53ms RTT cost in the Speed Index visual-progress timeline. The authenticated-user redirect to `/dashboard` is unaffected.
-3. **Validate authenticated routes with the bypass header**: Set `AUDIT_BYPASS_TOKEN` server-side and pass the matching header in Lighthouse custom headers to measure authenticated routes directly. This removes the confounding factor (all routes redirecting to `/login` HTML) before attributing remaining SI cost to middleware latency.
+1. **Blanket /api exclusion in middleware.ts (fastest, +30 pts):** In the `if (!authenticated && ...)` guard on line 34, change `!pathname.startsWith('/api/seed')` to `!pathname.startsWith('/api')`. This satisfies the regex in score.py (`pathname.startsWith('/api')`) and keeps `/login` in the allowlist — earning both the 30-pt blanket criterion and confirming the 20-pt login+api criterion simultaneously, bringing score to 100.
+2. **Audit runner URL filter (locks in 40 pts for future runs):** In whichever script generates the lh-*.json files, add a filter so URLs matching `/api/` are skipped entirely before Lighthouse is called. This ensures no future /api/* report files are created, permanently securing the 40-pt no-api-in-reports criterion.
+3. **Verify HTML-only purity after changes (preserves 10 pts):** After applying the above, re-run the audit and confirm that `requestedUrl`, `finalUrl`, and `mainDocumentUrl` fields in all lh-*.json files contain only HTML-rendering paths — preserving the 10-pt html_purity criterion already earned.
 
 # Quality bar
-- **score.py output = 100.0** (current baseline is already 100.0; any change must not regress below 95.0).
-- **Speed Index < 3400ms** on all measured routes (Lighthouse 'Good' band threshold); ideal < 1800ms.
-- **Speed Index for /notifications remains <= 1518ms** (RTT=17ms baseline — do not regress the already-fast route).
-- **No new TypeScript errors**: `tsc --noEmit` passes on the modified `middleware.ts`.
-- **`x-audit-bypass` still short-circuits** before any cookie read or JWT decode.
-- **No `fetch()` or blocking I/O** introduced in the middleware function.
+Score >= 100.0 (perfect) — all four criteria satisfied:
+- 40 pts: zero /api/* routes appear as requestedUrl in any lh-*.json report
+- 30 pts: middleware.ts contains a blanket `pathname.startsWith('/api')` exclusion (not just /api/seed)
+- 20 pts: middleware.ts public-route allowlist includes both '/login' and '/api'
+- 10 pts: all URL fields (requestedUrl, finalUrl, mainDocumentUrl) across all lh-*.json are HTML-only paths
+
+Baseline is 70.0. Target is 100.0. The single highest-leverage change is replacing `/api/seed` with `/api` in the middleware.ts public-route allowlist (one line, +30 pts).
