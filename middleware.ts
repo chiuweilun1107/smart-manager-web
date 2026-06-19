@@ -9,6 +9,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Early exit for public routes — skip all expensive work (cookie extraction, Supabase URL parse, JWT decode)
+  if (pathname.startsWith('/login') || pathname.startsWith('/api')) {
+    return NextResponse.next()
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseRef = supabaseUrl ? new URL(supabaseUrl).hostname.split('.')[0] : ''
 
@@ -31,11 +36,8 @@ export function middleware(request: NextRequest) {
     } catch { /* invalid token = not authenticated */ }
   }
 
-  if (!authenticated && !pathname.startsWith('/login') && !pathname.startsWith('/api')) {
+  if (!authenticated) {
     return NextResponse.redirect(new URL('/login', request.url))
-  }
-  if (authenticated && pathname === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
   return NextResponse.next()
 }
