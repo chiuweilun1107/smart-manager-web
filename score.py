@@ -1,110 +1,135 @@
 #!/usr/bin/env python3
 """
-score.py - Middleware /login early-exit efficiency scorer
+score.py -- Legacy Polyfill Waste Score (tsconfig.json asset)
 
-Asset: middleware.ts (Next.js middleware)
+Optimization goal: eliminate legacy JS polyfills injected by SWC/webpack when the
+Browserslist config targets browsers that already support ES2022+ APIs natively.
+tsconfig.json already sets target=ES2022, but without a matching Browserslist config,
+Next.js/SWC still injects core-js polyfills for Array.prototype.at, Object.hasOwn etc,
+causing chunk 117-9bcfe95f89d4b2e1.js to waste ~11 KiB per Lighthouse report.
 
-Optimization goal:
-  /login FCP = 1445ms, target < 900ms.
-  Root cause: JWT cookie parsing (cookie extraction + base64 decode) runs
-  unconditionally on ALL requests including /login, even though unauthenticated
-  users on /login never get redirected. Moving the /login early-exit BEFORE
-  the cookie-parsing block eliminates this wasted work on every /login page load.
+Score formula (higher is better):
+  score = tsconfig_bonus + browserslist_bonus + next_config_bonus - avg_wasted_bytes_per_route
 
-Score = composite 0..100 measuring how well the middleware short-circuits for /login:
+  tsconfig_bonus:       +1000 if target >= ES2022 (prerequisite already met)
+  browserslist_bonus:   +500  if modern Browserslist config targeting last 2 Chrome/Firefox/Safari
+                        +100  if any Browserslist config found (partial)
+  next_config_bonus:    +300  if experimental.browsersListForSwc in next.config
+  avg_wasted_bytes:     avg wastedBytes from legacy-javascript-insight across all lh-*.json
 
-  S1 [40 pts] /login path guard appears BEFORE cookie extraction begins
-               (login_guard_line < cookie_get_line)
-  S2 [30 pts] Public-route guard (covering /login AND /api) runs early,
-               before the heavy authentication work
-  S3 [20 pts] Supabase URL parsing (NEXT_PUBLIC_SUPABASE_URL) is also skipped
-               for /login (supabaseUrl access line > login_guard_line)
-  S4 [10 pts] atob / base64 decode is not reachable from /login
-               (atob call line > login_guard_line OR no atob at all)
-
-Higher = better. Perfect = 100.0 (all expensive work is behind the /login guard).
-Current baseline is low because cookie parsing precedes the /login guard.
+Baseline (tsconfig correct, no browserslist): ~1000 - 11669 = -10669
+After full fix (modern browserslist added):   ~1000 + 500 - 0 = +1500
 
 Usage:
-    python3 score.py <path-to-middleware.ts>
+    python3 score.py <path-to-tsconfig.json>
 """
 
 import sys
-import re
+import json
+import os
+import glob
 
 
-def first_match_line(lines, pattern):
-    """Return 1-indexed line number of first regex match, or 9999 if not found."""
-    compiled = re.compile(pattern)
-    for i, line in enumerate(lines, start=1):
-        if compiled.search(line):
-            return i
-    return 9999
+def score(asset_path):
+    project_dir = os.path.dirname(os.path.abspath(asset_path))
 
+    # Signal 1: tsconfig target alignment bonus
+    tsconfig_bonus = 0.0
+    try:
+        with open(asset_path, "r", encoding="utf-8") as f:
+            tsconfig = json.load(f)
+        target = tsconfig.get("compilerOptions", {}).get("target", "").upper()
+        good_targets = {"ES2022", "ES2023", "ES2024", "ES2025", "ESNEXT"}
+        if target in good_targets:
+            tsconfig_bonus = 1000.0
+    except Exception:
+        pass
 
-def score(path):
-    with open(path, 'r', encoding='utf-8') as f:
-        source = f.read()
+    # Signal 2: Browserslist config presence bonus
+    browserslist_bonus = 0.0
 
-    lines = source.splitlines()
+    bl_file = os.path.join(project_dir, ".browserslistrc")
+    if os.path.isfile(bl_file):
+        try:
+            with open(bl_file, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            lower = content.lower()
+            if any(kw in lower for kw in [
+                "last 2 chrome", "last 2 firefox", "last 2 safari",
+                "es2022", "chrome >= 100", "chrome>=100"
+            ]):
+                browserslist_bonus = 500.0
+            elif content:
+                browserslist_bonus = 100.0
+        except Exception:
+            pass
 
-    # Key structural line positions
-    login_guard_line = first_match_line(
-        lines, r"pathname\.startsWith\s*\(\s*['\"]\/login['\"]"
-    )
-    cookie_get_line = first_match_line(lines, r"\.cookies\.get\(")
-    supabase_url_line = first_match_line(lines, r"NEXT_PUBLIC_SUPABASE_URL")
-    atob_line = first_match_line(lines, r"\batob\(")
+    pkg_path = os.path.join(project_dir, "package.json")
+    if browserslist_bonus == 0.0 and os.path.isfile(pkg_path):
+        try:
+            with open(pkg_path, "r", encoding="utf-8") as f:
+                pkg = json.load(f)
+            bl = pkg.get("browserslist")
+            if bl:
+                bl_str = json.dumps(bl).lower()
+                if any(kw in bl_str for kw in [
+                    "last 2 chrome", "last 2 firefox", "last 2 safari",
+                    "chrome >= 100", "chrome>=100"
+                ]):
+                    browserslist_bonus = 500.0
+                else:
+                    browserslist_bonus = 100.0
+        except Exception:
+            pass
 
-    print(f"login_guard_line: {login_guard_line}", file=sys.stderr)
-    print(f"cookie_get_line:  {cookie_get_line}", file=sys.stderr)
-    print(f"supabase_url_line: {supabase_url_line}", file=sys.stderr)
-    print(f"atob_line:        {atob_line}", file=sys.stderr)
+    # Signal 3: next.config experimental.browsersListForSwc bonus
+    next_config_bonus = 0.0
+    for nc_name in ["next.config.mjs", "next.config.js", "next.config.ts", "next.config.cjs"]:
+        nc_path = os.path.join(project_dir, nc_name)
+        if os.path.isfile(nc_path):
+            try:
+                with open(nc_path, "r", encoding="utf-8") as f:
+                    nc_content = f.read()
+                if "browsersListForSwc" in nc_content or "browserslistForSwc" in nc_content:
+                    next_config_bonus = 300.0
+            except Exception:
+                pass
 
-    # S1: login guard before cookie access (40 pts)
-    if login_guard_line < cookie_get_line:
-        s1 = 40.0
+    # Signal 4: Lighthouse legacy-javascript-insight wastedBytes (main penalty signal)
+    lh_pattern = os.path.join(project_dir, "lh-*.json")
+    lh_files = sorted(glob.glob(lh_pattern))
+    main_report = os.path.join(project_dir, "lighthouse-report.json")
+    if os.path.isfile(main_report):
+        lh_files.append(main_report)
+
+    total_wasted_bytes = 0.0
+    routes_audited = 0
+
+    for lh_path in lh_files:
+        try:
+            with open(lh_path, "r", encoding="utf-8") as f:
+                report = json.load(f)
+            audits = report.get("audits", {})
+            lj_insight = audits.get("legacy-javascript-insight", {})
+            items = lj_insight.get("details", {}).get("items", [])
+            for item in items:
+                total_wasted_bytes += float(item.get("wastedBytes", 0))
+            routes_audited += 1
+        except Exception:
+            continue
+
+    if routes_audited > 0:
+        avg_wasted = total_wasted_bytes / routes_audited
     else:
-        gap = login_guard_line - cookie_get_line
-        s1 = max(0.0, 40.0 - gap * 2.0)
+        avg_wasted = 0.0
 
-    # S2: combined public-route guard (/login AND /api) before heavy work (30 pts)
-    combined_guard_line = first_match_line(
-        lines,
-        r"(?:startsWith.*['\"]\/login['\"].*startsWith.*['\"]\/api['\"]"
-        r"|startsWith.*['\"]\/api['\"].*startsWith.*['\"]\/login['\"]"
-        r"|!\s*pathname\.startsWith.*&&\s*!\s*pathname\.startsWith)"
-    )
-    if combined_guard_line == 9999:
-        if login_guard_line < cookie_get_line:
-            s2 = 15.0
-        else:
-            s2 = 0.0
-    elif combined_guard_line < cookie_get_line:
-        s2 = 30.0
-    else:
-        s2 = 10.0
-
-    # S3: supabase URL parse skipped for /login (20 pts)
-    if supabase_url_line == 9999 or supabase_url_line > login_guard_line:
-        s3 = 20.0
-    else:
-        s3 = 0.0
-
-    # S4: atob/base64 decode not reached for /login (10 pts)
-    if atob_line == 9999 or atob_line > login_guard_line:
-        s4 = 10.0
-    else:
-        s4 = 0.0
-
-    total = s1 + s2 + s3 + s4
-    print(f"S1={s1} S2={s2} S3={s3} S4={s4} => total={total}", file=sys.stderr)
-    return round(total, 2)
+    final_score = tsconfig_bonus + browserslist_bonus + next_config_bonus - avg_wasted
+    return final_score
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 score.py <path-to-middleware.ts>", file=sys.stderr)
+        print("Usage: python3 score.py <path-to-tsconfig.json>", file=sys.stderr)
         sys.exit(1)
     result = score(sys.argv[1])
     print(result)
