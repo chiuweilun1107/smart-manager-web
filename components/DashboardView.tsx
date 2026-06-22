@@ -1,12 +1,12 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Icon from '@/components/Icon'
 import type { SessionUser } from '@/lib/types'
 
 interface DashConfig { title: string; link: string }
-
 interface DashData {
-  my_requests: Array<{ id: number; request_no: string; module_code: string; title: string; status: string; created_at: string }>
+  my_requests: Array<{ id: number; request_no: string; module_code: string; title: string; status: string; amount?: number; created_at: string }>
   pending_approvals_count: number
   announcements: Array<{ id: number; title: string; created_at: string }>
   leave_balances: Array<{ period_year: number; used_hours: number; granted_hours: number; leave_types?: { name: string } }>
@@ -14,245 +14,209 @@ interface DashData {
 }
 
 const STATUS_MAP: Record<string, string> = {
-  draft: '草稿', in_review: '審核中', approved: '已核准',
-  rejected: '已駁回', returned: '退回', cancelled: '已取消',
+  draft: '草稿', in_review: '審核中', approved: '已核准', rejected: '已駁回', returned: '退回', cancelled: '已取消',
+}
+const MODULE_LABEL: Record<string, string> = {
+  leave: '請假申請', overtime: '加班申請', expense: '費用報銷', procurement: '採購申請',
+  seal: '用印申請', benefit: '福利申請', attendance_correction: '補打卡',
 }
 
-const CHIP_CLASS: Record<string, string> = {
-  draft: 'chip chip--draft', in_review: 'chip chip--in_review', approved: 'chip chip--approved',
-  rejected: 'chip chip--rejected', returned: 'chip chip--returned', cancelled: 'chip chip--cancelled',
-}
-
-function fmt(iso: string) {
-  return new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
-}
-
-function MetricCard({ label, value, sub, accent, isLast }: { label: string; value: string | number; sub?: string; accent?: boolean; isLast?: boolean }) {
+function Donut({ pct, center, sub }: { pct: number; center: string; sub: string }) {
+  const r = 42, c = 2 * Math.PI * r
+  const off = c * (1 - Math.max(0, Math.min(100, pct)) / 100)
   return (
-    <div style={{
-      padding: '20px 24px',
-      borderRight: isLast ? 'none' : '1px solid var(--border)',
-      position: 'relative',
-    }}>
-      {accent && (
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
-          background: 'var(--primary)', borderRadius: '2px 2px 0 0',
-        }} />
-      )}
-      <div className="label-mono" style={{ marginBottom: '10px' }}>{label}</div>
-      <div style={{
-        fontSize: '36px', fontWeight: 300,
-        color: accent ? 'var(--primary)' : 'var(--text)',
-        letterSpacing: '-0.06em', fontVariantNumeric: 'tabular-nums', lineHeight: 1,
-      }}>
-        {value ?? '—'}
+    <div style={{ position: 'relative', width: '128px', height: '128px' }}>
+      <svg viewBox="0 0 100 100" width="128" height="128">
+        <circle cx="50" cy="50" r={r} fill="none" stroke="var(--surface-2)" strokeWidth="9" />
+        <circle cx="50" cy="50" r={r} fill="none" stroke="var(--primary)" strokeWidth="9"
+          strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round" transform="rotate(-90 50 50)" />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.03em' }}>{center}</div>
+        <div style={{ fontSize: '10px', color: 'var(--text-faint)', fontFamily: 'var(--font-geist-mono), monospace', marginTop: '2px' }}>{sub}</div>
       </div>
-      {sub && (
-        <div style={{ color: 'var(--text-faint)', fontSize: '12px', marginTop: '8px' }}>{sub}</div>
-      )}
     </div>
   )
 }
 
+const WORKFLOW_STEPS = [
+  { icon: 'document', label: '申請建立', desc: '填寫並送出表單' },
+  { icon: 'users', label: '主管審核', desc: '直屬主管核可' },
+  { icon: 'currency-dollar', label: '財務覆核', desc: '財務金額審查' },
+  { icon: 'shield-check', label: '權責核定', desc: '權責主管簽核' },
+  { icon: 'archive-box', label: '行政歸檔', desc: '完成並存查' },
+]
+
 export default function DashboardView({ user, shortcuts }: { user: SessionUser; shortcuts: DashConfig[] }) {
   const [data, setData] = useState<DashData | null>(null)
   const [fetchError, setFetchError] = useState(false)
-  // client-only date/time to avoid SSR hydration mismatch
-  const [greeting, setGreeting] = useState('')
-  const [dateStr, setDateStr] = useState('')
   const [thisYear, setThisYear] = useState(0)
 
+  useEffect(() => { setThisYear(new Date().getFullYear()) }, [])
   useEffect(() => {
-    const now = new Date()
-    const h = now.getHours()
-    setGreeting(h < 12 ? '早安' : h < 18 ? '午安' : '晚安')
-    setDateStr(now.toLocaleDateString('zh-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }))
-    setThisYear(now.getFullYear())
+    fetch('/api/dashboard').then(r => { if (!r.ok) throw new Error(); return r.json() }).then(setData).catch(() => setFetchError(true))
   }, [])
 
-  useEffect(() => {
-    fetch('/api/dashboard')
-      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
-      .then(setData)
-      .catch(() => setFetchError(true))
-  }, [])
+  const reqs = data?.my_requests || []
+  const countBy = (m: string) => reqs.filter(r => r.module_code === m).length
+  const kpis = [
+    { label: '待簽核', value: data?.pending_approvals_count ?? 0, accent: true },
+    { label: '請假申請', value: countBy('leave') },
+    { label: '費用報銷', value: countBy('expense') },
+    { label: '採購申請', value: countBy('procurement') },
+    { label: '用印申請', value: countBy('seal') },
+    { label: '加班申請', value: countBy('overtime') },
+  ]
 
-  const leaveBalance = thisYear > 0 ? data?.leave_balances?.find(b => b.period_year === thisYear) : undefined
-  const clockIn = data?.today_attendance?.clock_in_at
-  const clockOut = data?.today_attendance?.clock_out_at
-  const attendStr = data?.today_attendance
-    ? `${clockIn ? fmt(clockIn) : '—'} → ${clockOut ? fmt(clockOut) : '未退勤'}`
-    : null
+  const leaveBal = thisYear > 0 ? data?.leave_balances?.find(b => b.period_year === thisYear) : undefined
+  const usePct = leaveBal && leaveBal.granted_hours > 0 ? Math.round((leaveBal.used_hours / leaveBal.granted_hours) * 100) : 0
+  const remainPct = 100 - usePct
+  const expenseReqs = reqs.filter(r => r.module_code === 'expense')
+  const expenseTotal = expenseReqs.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+
+  const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }
+  const sectionTitle: React.CSSProperties = { fontSize: '14px', fontWeight: 700, color: 'var(--text)', margin: 0, letterSpacing: '-0.01em' }
 
   return (
     <>
       <style>{`
-        .d-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-        .d-row { display: flex; align-items: center; padding: 11px 16px; border-bottom: 1px solid var(--border); text-decoration: none; transition: background 0.1s ease; }
-        .d-row:hover { background: var(--surface-2); }
-        .d-row:last-child { border-bottom: none; }
-        .sc-btn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; text-decoration: none; display: block; transition: border-color 0.15s ease, background 0.15s ease; }
-        .sc-btn:hover { border-color: var(--primary); background: var(--primary-light); }
-        @keyframes spin { to { transform: rotate(360deg) } }
+        .ib-row { display:flex; align-items:center; padding:11px 16px; border-bottom:1px solid var(--border); text-decoration:none; transition:background .1s ease; }
+        .ib-row:hover { background: var(--surface-2); }
+        .ib-row:last-child { border-bottom:none; }
+        .wf-line { flex:1; height:1px; background:var(--border-strong); margin:0 4px; }
       `}</style>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
 
-        {/* Greeting — client-only, no SSR mismatch */}
-        {greeting && (
-          <div style={{ marginBottom: '24px' }}>
-            <h1 style={{
-              fontSize: '24px', fontWeight: 400, color: 'var(--text)',
-              letterSpacing: '-0.04em', lineHeight: 1.2, margin: 0,
-            }}>
-              {greeting}，{user.displayName?.split(' ')[0] || user.email}
-            </h1>
-            <p style={{ color: 'var(--text-faint)', fontSize: '13px', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
-              {dateStr}
-            </p>
-          </div>
-        )}
-
-        {/* KPI row */}
-        <div className="d-card rwd-kpi" style={{
-          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-          marginBottom: '20px',
-        }}>
-          <MetricCard
-            label="待簽核"
-            value={data?.pending_approvals_count ?? '—'}
-            sub={data?.pending_approvals_count ? '需要你處理' : '目前沒有'}
-            accent={!!data?.pending_approvals_count}
-          />
-          <MetricCard
-            label="我的申請"
-            value={data?.my_requests?.length ?? '—'}
-            sub="本月"
-          />
-          <MetricCard
-            label="今日出勤"
-            value={attendStr || (data?.today_attendance === null ? '未打卡' : '—')}
-            sub={clockOut ? '已退勤' : clockIn ? '進行中' : undefined}
-          />
-          <MetricCard
-            label={leaveBalance?.leave_types?.name || '年假'}
-            value={leaveBalance ? `${leaveBalance.granted_hours - leaveBalance.used_hours}h` : '—'}
-            sub={leaveBalance ? `已用 ${leaveBalance.used_hours}h` : undefined}
-            isLast
-          />
+        {/* 今日待辦總覽 — 6 KPI */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <h2 style={sectionTitle}>今日待辦總覽</h2>
+          <span className="label-mono">{user.roleName} · {user.displayName}</span>
+        </div>
+        {fetchError && <div style={{ ...card, padding: '16px', color: 'var(--danger)', fontSize: '13px', marginBottom: '20px' }}>載入失敗，請重新整理</div>}
+        <div className="rwd-kpi" style={{ ...card, display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', marginBottom: '20px', overflow: 'hidden' }}>
+          {kpis.map((k, i) => (
+            <div key={k.label} style={{ padding: '18px 20px', borderRight: i < kpis.length - 1 ? '1px solid var(--border)' : 'none', position: 'relative' }}>
+              {k.accent && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'var(--primary)' }} />}
+              <div className="label-mono" style={{ marginBottom: '8px' }}>{k.label}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ fontSize: '32px', fontWeight: 700, color: k.accent ? 'var(--primary)' : 'var(--text)', letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{data ? k.value : '—'}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>件</span>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Main content grid: 3:2 */}
-        <div className="rwd-cols-2" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '16px', marginBottom: '20px' }}>
+        {/* 待簽核清單 INBOX */}
+        <div style={{ ...card, marginBottom: '20px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+            <h3 style={sectionTitle}>待簽核清單 <span className="label-mono" style={{ marginLeft: '6px' }}>/ INBOX</span></h3>
+            <Link href="/approvals" style={{ fontSize: '12px', color: 'var(--primary)', textDecoration: 'none', fontWeight: 600 }}>查看全部 →</Link>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', minWidth: '640px' }}>
+              <thead>
+                <tr style={{ background: 'var(--surface-2)' }}>
+                  {['申請單號', '類型', '主旨', '金額/天數', '狀態', '申請日'].map(h => (
+                    <th key={h} className="label-mono" style={{ padding: '9px 16px', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {!data && <tr><td colSpan={6} style={{ padding: '28px', textAlign: 'center', color: 'var(--text-faint)' }}>載入中…</td></tr>}
+                {data && reqs.length === 0 && <tr><td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-faint)', fontSize: '13px' }}>目前沒有待辦項目</td></tr>}
+                {reqs.slice(0, 8).map(r => (
+                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: '10px 16px', fontFamily: 'var(--font-geist-mono), monospace', fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{r.request_no}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{MODULE_LABEL[r.module_code] || r.module_code}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--text)', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{r.amount ? `NT$ ${Number(r.amount).toLocaleString()}` : '—'}</td>
+                    <td style={{ padding: '10px 16px' }}><span className={`chip chip--${r.status}`}>{STATUS_MAP[r.status] || r.status}</span></td>
+                    <td style={{ padding: '10px 16px', fontFamily: 'var(--font-geist-mono), monospace', fontSize: '11px', color: 'var(--text-faint)', whiteSpace: 'nowrap' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString('zh-TW') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-          {/* Recent requests */}
-          <div className="d-card">
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 16px', borderBottom: '1px solid var(--border)',
-            }}>
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>最近申請</span>
-              <Link href="/approvals" style={{ fontSize: '12px', color: 'var(--primary)', textDecoration: 'none' }}>
-                全部 →
-              </Link>
+        {/* 三欄: 出勤圓環 / 請假統計 / 費用概況 / 近期紀錄 */}
+        <div className="rwd-cols-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
+          {/* 假別使用 圓環 */}
+          <div style={{ ...card, padding: '18px' }}>
+            <h3 style={{ ...sectionTitle, marginBottom: '14px' }}>特休使用<span className="label-mono" style={{ marginLeft: '6px' }}>本年</span></h3>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+              <Donut pct={remainPct} center={`${remainPct}%`} sub="剩餘" />
             </div>
-
-            {fetchError && (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--danger)', fontSize: '13px' }}>
-                載入失敗，請重新整理
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+              <span>已用 {leaveBal?.used_hours ?? 0}h</span><span>核配 {leaveBal?.granted_hours ?? 0}h</span>
+            </div>
+          </div>
+          {/* 請假統計 */}
+          <div style={{ ...card, padding: '18px' }}>
+            <h3 style={{ ...sectionTitle, marginBottom: '14px' }}>請假統計<span className="label-mono" style={{ marginLeft: '6px' }}>本年</span></h3>
+            {(data?.leave_balances || []).slice(0, 6).map((b, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '5px 0', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                <span>{b.leave_types?.name || '假別'}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{b.used_hours}h</span>
               </div>
-            )}
-            {!fetchError && !data && (
-              <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-                <div style={{ width: '20px', height: '20px', border: '2px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} />
-              </div>
-            )}
-            {!fetchError && data && (!data.my_requests || data.my_requests.length === 0) && (
-              <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-faint)', fontSize: '13px' }}>
-                尚無申請紀錄
-              </div>
-            )}
-            {data?.my_requests?.slice(0, 6).map(r => (
-              <Link key={r.id} href={`/request/${r.id}`} className="d-row">
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: '13px', fontWeight: 500, color: 'var(--text)',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  }}>{r.title}</div>
-                  <div style={{
-                    fontFamily: 'var(--font-geist-mono), monospace',
-                    fontSize: '11px', color: 'var(--text-faint)', marginTop: '2px', fontVariantNumeric: 'tabular-nums',
-                  }}>{r.request_no}</div>
+            ))}
+            {(!data?.leave_balances || data.leave_balances.length === 0) && <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>尚無紀錄</div>}
+          </div>
+          {/* 費用報銷概況 */}
+          <div style={{ ...card, padding: '18px' }}>
+            <h3 style={{ ...sectionTitle, marginBottom: '14px' }}>費用報銷<span className="label-mono" style={{ marginLeft: '6px' }}>概況</span></h3>
+            <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>NT$ {expenseTotal.toLocaleString()}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-faint)', marginTop: '2px', marginBottom: '14px' }}>累計報銷金額</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderTop: '1px solid var(--border)' }}>
+              <span>報銷筆數</span><span style={{ color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{expenseReqs.length}</span>
+            </div>
+          </div>
+          {/* 近期行政紀錄 */}
+          <div style={{ ...card, padding: '18px' }}>
+            <h3 style={{ ...sectionTitle, marginBottom: '14px' }}>近期紀錄<span className="label-mono" style={{ marginLeft: '6px' }}>RECENT</span></h3>
+            {reqs.slice(0, 5).map(r => (
+              <div key={r.id} style={{ display: 'flex', gap: '8px', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)', marginTop: '6px', flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-faint)', fontFamily: 'var(--font-geist-mono), monospace' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString('zh-TW') : ''}</div>
                 </div>
-                <span className={CHIP_CLASS[r.status] || 'chip chip--draft'} style={{ marginLeft: '12px', flexShrink: 0 }}>
-                  {STATUS_MAP[r.status] || r.status}
-                </span>
-              </Link>
+              </div>
+            ))}
+            {reqs.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>尚無紀錄</div>}
+          </div>
+        </div>
+
+        {/* 行政流程概覽 WORKFLOW */}
+        <div style={{ ...card, padding: '18px 20px 22px' }}>
+          <h3 style={{ ...sectionTitle, marginBottom: '18px' }}>行政流程概覽 <span className="label-mono" style={{ marginLeft: '6px' }}>/ WORKFLOW</span></h3>
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            {WORKFLOW_STEPS.map((s, i) => (
+              <div key={s.label} style={{ display: 'contents' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flexShrink: 0, width: '110px' }}>
+                  <div style={{ width: '44px', height: '44px', borderRadius: '50%', border: '1.5px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', background: 'var(--surface)' }}>
+                    <Icon name={s.icon} size={20} />
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)' }}>{s.label}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-faint)', textAlign: 'center', lineHeight: 1.4 }}>{s.desc}</div>
+                </div>
+                {i < WORKFLOW_STEPS.length - 1 && <div className="wf-line" style={{ marginTop: '22px' }} />}
+              </div>
             ))}
           </div>
-
-          {/* Right column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Announcements */}
-            <div className="d-card" style={{ flex: 1 }}>
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>最新公告</span>
-              </div>
-              {data?.announcements?.length === 0 && (
-                <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-faint)', fontSize: '12px' }}>暫無公告</div>
-              )}
-              {data?.announcements?.slice(0, 4).map(a => (
-                <div key={a.id} style={{
-                  padding: '11px 16px',
-                  borderBottom: '1px solid var(--border)',
-                  display: 'flex', flexDirection: 'column', gap: '3px',
-                }}>
-                  <div style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 400 }}>{a.title}</div>
-                  <div style={{
-                    fontFamily: 'var(--font-geist-mono), monospace',
-                    fontSize: '10px', color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {new Date(a.created_at).toLocaleDateString('zh-TW')}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Pending CTA */}
-            {!!data?.pending_approvals_count && (
-              <Link href="/approvals" style={{
-                display: 'block', textDecoration: 'none',
-                background: 'var(--primary-light)', border: '1px solid var(--primary)',
-                borderRadius: 'var(--radius)', padding: '16px',
-                transition: 'background 0.15s ease',
-              }}>
-                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--primary)', marginBottom: '4px' }}>
-                  待簽核事項
-                </div>
-                <div style={{ fontSize: '28px', fontWeight: 300, color: 'var(--primary)', letterSpacing: '-0.05em', fontVariantNumeric: 'tabular-nums' }}>
-                  {data.pending_approvals_count} 筆
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--primary)', opacity: 0.7, marginTop: '4px' }}>
-                  點此前往處理 →
-                </div>
-              </Link>
-            )}
-          </div>
         </div>
 
-        {/* Shortcuts */}
+        {/* 快速功能 */}
         {shortcuts.length > 0 && (
-          <div>
+          <div style={{ marginTop: '20px' }}>
             <div className="label-mono" style={{ marginBottom: '10px' }}>快速功能</div>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-              gap: '8px',
-            }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
               {shortcuts.map(c => (
-                <Link key={c.link} href={c.link} className="sc-btn">
-                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text)' }}>{c.title}</div>
+                <Link key={c.link} href={c.link} style={{ ...card, padding: '14px 16px', textDecoration: 'none', display: 'block', transition: 'border-color .15s ease' }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--primary)')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--border)')}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{c.title}</div>
                   <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '6px' }}>前往 →</div>
                 </Link>
               ))}
