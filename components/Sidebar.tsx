@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { visibleModules } from '@/lib/modules'
@@ -7,18 +8,20 @@ import Icon from '@/components/Icon'
 
 const GROUP_ORDER = ['我的工作區', '差勤', '行政 / 財務', '人資', '治理 / 系統']
 
-function NavItem({ href, icon, label, active }: { href: string; icon: string; label: string; active: boolean }) {
+function NavItem({ href, icon, label, active, collapsed }: {
+  href: string; icon: string; label: string; active: boolean; collapsed: boolean
+}) {
   return (
     <Link
       href={href}
+      title={collapsed ? label : undefined}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '7px 12px',
+        display: 'flex', alignItems: 'center',
+        gap: collapsed ? '0' : '8px',
+        padding: collapsed ? '9px 0' : '7px 12px',
+        justifyContent: collapsed ? 'center' : 'flex-start',
         borderRadius: 'var(--radius)',
-        fontSize: '13px',
-        fontWeight: active ? 500 : 400,
+        fontSize: '13px', fontWeight: active ? 500 : 400,
         color: active ? 'var(--primary)' : 'var(--text-muted)',
         background: active ? 'var(--primary-light)' : 'transparent',
         textDecoration: 'none',
@@ -38,8 +41,14 @@ function NavItem({ href, icon, label, active }: { href: string; icon: string; la
         }
       }}
     >
-      <Icon name={icon} size={15} className={active ? '' : 'opacity-60'} />
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+        <Icon name={icon} size={16} className={active ? '' : 'opacity-60'} />
+      </span>
+      {!collapsed && (
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {label}
+        </span>
+      )}
     </Link>
   )
 }
@@ -47,6 +56,8 @@ function NavItem({ href, icon, label, active }: { href: string; icon: string; la
 export default function Sidebar({ roleCode }: { roleCode: string }) {
   const pathname = usePathname()
   const modules = visibleModules(roleCode)
+  const [collapsed, setCollapsed] = useState(false)
+  const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set())
 
   const groups: Record<string, typeof modules> = {}
   for (const m of modules) {
@@ -55,48 +66,104 @@ export default function Sidebar({ roleCode }: { roleCode: string }) {
     groups[g].push(m)
   }
 
+  function toggleGroup(g: string) {
+    setClosedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(g)) next.delete(g)
+      else next.add(g)
+      return next
+    })
+  }
+
+  const sideW = collapsed ? '56px' : 'var(--sidebar-w)'
+
   return (
     <aside style={{
-      width: 'var(--sidebar-w)',
+      width: sideW, minWidth: sideW,
       background: 'var(--surface)',
       borderRight: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflowY: 'auto',
+      display: 'flex', flexDirection: 'column',
+      overflowY: 'auto', overflowX: 'hidden',
       flexShrink: 0,
+      transition: 'width 0.2s ease, min-width 0.2s ease',
     }}>
-      {/* Brand */}
+      {/* Brand header */}
       <div style={{
-        padding: '18px 16px 14px',
+        padding: collapsed ? '14px 0' : '16px 16px 12px',
         borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'space-between',
+        gap: '8px',
       }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>
-          AiDo 智行
-        </div>
-        <div className="label-mono" style={{ marginTop: '3px' }}>
-          {ROLE_LABELS[roleCode] || roleCode}
-        </div>
+        {!collapsed && (
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
+              AiDo 智行
+            </div>
+            <div className="label-mono" style={{ marginTop: '3px' }}>
+              {ROLE_LABELS[roleCode] || roleCode}
+            </div>
+          </div>
+        )}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          title={collapsed ? '展開側欄' : '收合側欄'}
+          style={{
+            flexShrink: 0, background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'var(--text-faint)', padding: '4px', borderRadius: 'var(--radius-sm)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'color 0.15s ease',
+          }}
+          onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text)')}
+          onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-faint)')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {collapsed
+              ? <polyline points="9 18 15 12 9 6" />
+              : <polyline points="15 18 9 12 15 6" />}
+          </svg>
+        </button>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '8px 8px' }}>
-        <NavItem href="/dashboard" icon="chart-bar-square" label="首頁" active={pathname === '/dashboard'} />
+      <nav style={{ flex: 1, padding: collapsed ? '8px 4px' : '8px' }}>
+        <NavItem href="/dashboard" icon="chart-bar-square" label="首頁"
+          active={pathname === '/dashboard'} collapsed={collapsed} />
 
         {GROUP_ORDER.filter(g => groups[g]?.length).map(g => (
           <div key={g}>
-            <div className="label-mono" style={{ padding: '12px 12px 4px', letterSpacing: '0.08em' }}>
-              {g}
-            </div>
-            {groups[g].map(m => {
+            {/* Group header — clickable to collapse */}
+            {!collapsed ? (
+              <button
+                onClick={() => toggleGroup(g)}
+                style={{
+                  width: '100%', background: 'transparent', border: 'none',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 12px 4px', gap: '4px',
+                }}
+              >
+                <span className="label-mono" style={{ letterSpacing: '0.08em' }}>{g}</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                  style={{
+                    flexShrink: 0, color: 'var(--text-faint)',
+                    transform: closedGroups.has(g) ? 'rotate(-90deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.15s ease',
+                  }}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            ) : (
+              <div style={{ height: '8px' }} />
+            )}
+
+            {/* Group items */}
+            {(collapsed || !closedGroups.has(g)) && groups[g].map(m => {
               const href = `/module/${m.code}`
               return (
-                <NavItem
-                  key={m.code}
-                  href={href}
-                  icon={m.icon}
-                  label={m.name}
-                  active={pathname.startsWith(href)}
-                />
+                <NavItem key={m.code} href={href} icon={m.icon} label={m.name}
+                  active={pathname.startsWith(href)} collapsed={collapsed} />
               )
             })}
           </div>
