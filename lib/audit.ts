@@ -4,6 +4,7 @@ interface AuditParams {
   client: SupabaseClient
   actorUserId: number
   action: string
+  companyId?: number
   entityType?: string
   entityId?: number
   moduleCode?: string
@@ -13,9 +14,10 @@ interface AuditParams {
   ua?: string
 }
 
-export async function audit({ client, actorUserId, action, entityType, entityId, moduleCode, before, after, ip, ua }: AuditParams) {
+export async function audit({ client, actorUserId, action, companyId, entityType, entityId, moduleCode, before, after, ip, ua }: AuditParams) {
   try {
     await client.schema('aido').from('audit_logs').insert({
+      company_id: companyId ?? 1,
       actor_user_id: actorUserId,
       action,
       entity_type: entityType || null,

@@ -415,7 +415,7 @@ export async function addStep(client: SupabaseClient, user: Record<string, unkno
   let insertNo = cur.step_no + 1
   while (used.has(insertNo)) insertNo++
   await db(client).from('approval_steps').insert({
-    request_id: requestId, step_no: insertNo, step_type: 'serial', name: opts.name || '加簽關卡',
+    request_id: requestId, company_id: request.company_id ?? 1, step_no: insertNo, step_type: 'serial', name: opts.name || '加簽關卡',
     approver_type: approver.approver_type, approver_user_id: approver.approver_user_id || null,
     approver_role_id: approver.approver_role_id || null, required_mode: 'all', status: 'pending'
   })

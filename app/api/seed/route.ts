@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     { code: 'legal', name: '法務', dashboard_route: '/dashboard', level: 3 },
     { code: 'auditor', name: '稽核', dashboard_route: '/dashboard', level: 4 },
   ]
-  await db.from('roles').upsert(ROLES, { onConflict: 'code' })
+  await db.from('roles').upsert(ROLES.map(r => ({ ...r, company_id: 1 })), { onConflict: 'code' })
   results.push(`roles: ${ROLES.length}`)
 
   // 2. Seed departments
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     { code: 'LEGAL', name: '法務部', sort_order: 5 },
     { code: 'OPS', name: '營運部', sort_order: 6 },
   ]
-  await db.from('departments').upsert(DEPARTMENTS, { onConflict: 'code' })
+  await db.from('departments').upsert(DEPARTMENTS.map(d => ({ ...d, company_id: 1 })), { onConflict: 'company_id,code' })
   results.push(`departments: ${DEPARTMENTS.length}`)
 
   // 3. Get role/dept IDs
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     { code: 'maternity', name: '產假', unit: 'day', paid_type: 'paid' },
     { code: 'paternity', name: '陪產假', unit: 'day', paid_type: 'paid' },
   ]
-  await db.from('leave_types').upsert(LEAVE_TYPES, { onConflict: 'code' })
+  await db.from('leave_types').upsert(LEAVE_TYPES.map(l => ({ ...l, company_id: 1 })), { onConflict: 'code' })
   results.push(`leave_types: ${LEAVE_TYPES.length}`)
 
   // 5. Seed 12 users (via Supabase Auth + aido.users)
@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
       authUserId = authUser.user.id
 
       const { data: inserted } = await db.from('users').insert({
+        company_id: 1,
         auth_user_id: authUserId,
         email: u.email,
         display_name: u.name,
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
   const balanceRows = []
   for (const u of createdUsers) {
     for (const lt of (leaveTypes || [])) {
-      balanceRows.push({ user_id: u.id, leave_type_id: lt.id, period_year: year, granted_hours: lt.code === 'annual' ? 80 : 0, used_hours: 0 })
+      balanceRows.push({ company_id: 1, user_id: u.id, leave_type_id: lt.id, period_year: year, granted_hours: lt.code === 'annual' ? 80 : 0, used_hours: 0 })
     }
   }
   if (balanceRows.length) {
@@ -137,6 +138,7 @@ export async function POST(req: NextRequest) {
   const exec = createdUsers.find(u => u.roleCode === 'executive')
   if (exec) {
     await db.from('announcements').upsert([{
+      company_id: 1,
       title: '歡迎使用 AiDo 智行企業管理平台',
       body: '本平台整合假勤、薪資、簽核、採購等企業行政功能，請各單位依角色使用對應功能。',
       status: 'published',
