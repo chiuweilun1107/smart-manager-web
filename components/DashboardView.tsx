@@ -27,11 +27,11 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
 }
 
-function MetricCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
+function MetricCard({ label, value, sub, accent, isLast }: { label: string; value: string | number; sub?: string; accent?: boolean; isLast?: boolean }) {
   return (
     <div style={{
       padding: '20px 24px',
-      borderRight: '1px solid var(--border)',
+      borderRight: isLast ? 'none' : '1px solid var(--border)',
       position: 'relative',
     }}>
       {accent && (
@@ -57,11 +57,28 @@ function MetricCard({ label, value, sub, accent }: { label: string; value: strin
 
 export default function DashboardView({ user, shortcuts }: { user: SessionUser; shortcuts: DashConfig[] }) {
   const [data, setData] = useState<DashData | null>(null)
-  const thisYear = new Date().getFullYear()
+  const [fetchError, setFetchError] = useState(false)
+  // client-only date/time to avoid SSR hydration mismatch
+  const [greeting, setGreeting] = useState('')
+  const [dateStr, setDateStr] = useState('')
+  const [thisYear, setThisYear] = useState(0)
 
-  useEffect(() => { fetch('/api/dashboard').then(r => r.json()).then(setData).catch(() => {}) }, [])
+  useEffect(() => {
+    const now = new Date()
+    const h = now.getHours()
+    setGreeting(h < 12 ? '早安' : h < 18 ? '午安' : '晚安')
+    setDateStr(now.toLocaleDateString('zh-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }))
+    setThisYear(now.getFullYear())
+  }, [])
 
-  const leaveBalance = data?.leave_balances?.find(b => b.period_year === thisYear)
+  useEffect(() => {
+    fetch('/api/dashboard')
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+      .then(setData)
+      .catch(() => setFetchError(true))
+  }, [])
+
+  const leaveBalance = thisYear > 0 ? data?.leave_balances?.find(b => b.period_year === thisYear) : undefined
   const clockIn = data?.today_attendance?.clock_in_at
   const clockOut = data?.today_attendance?.clock_out_at
   const attendStr = data?.today_attendance
@@ -77,24 +94,27 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
         .d-row:last-child { border-bottom: none; }
         .sc-btn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; text-decoration: none; display: block; transition: border-color 0.15s ease, background 0.15s ease; }
         .sc-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+        @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
 
-        {/* Greeting */}
-        <div style={{ marginBottom: '24px' }}>
-          <h1 style={{
-            fontSize: '24px', fontWeight: 400, color: 'var(--text)',
-            letterSpacing: '-0.04em', lineHeight: 1.2, margin: 0,
-          }}>
-            {getGreeting()}，{user.displayName?.split(' ')[0] || user.email}
-          </h1>
-          <p style={{ color: 'var(--text-faint)', fontSize: '13px', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
-            {new Date().toLocaleDateString('zh-TW', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
-        </div>
+        {/* Greeting — client-only, no SSR mismatch */}
+        {greeting && (
+          <div style={{ marginBottom: '24px' }}>
+            <h1 style={{
+              fontSize: '24px', fontWeight: 400, color: 'var(--text)',
+              letterSpacing: '-0.04em', lineHeight: 1.2, margin: 0,
+            }}>
+              {greeting}，{user.displayName?.split(' ')[0] || user.email}
+            </h1>
+            <p style={{ color: 'var(--text-faint)', fontSize: '13px', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
+              {dateStr}
+            </p>
+          </div>
+        )}
 
-        {/* KPI row — borderless grid, top accent on pending */}
+        {/* KPI row */}
         <div className="d-card" style={{
           display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
           marginBottom: '20px',
@@ -119,6 +139,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
             label={leaveBalance?.leave_types?.name || '年假'}
             value={leaveBalance ? `${leaveBalance.granted_hours - leaveBalance.used_hours}h` : '—'}
             sub={leaveBalance ? `已用 ${leaveBalance.used_hours}h` : undefined}
+            isLast
           />
         </div>
 
@@ -136,13 +157,18 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
                 全部 →
               </Link>
             </div>
-            {!data && (
-              <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-                <div style={{ width: '20px', height: '20px', border: '2px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} />
-                <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+
+            {fetchError && (
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--danger)', fontSize: '13px' }}>
+                載入失敗，請重新整理
               </div>
             )}
-            {data && (!data.my_requests || data.my_requests.length === 0) && (
+            {!fetchError && !data && (
+              <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+                <div style={{ width: '20px', height: '20px', border: '2px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} />
+              </div>
+            )}
+            {!fetchError && data && (!data.my_requests || data.my_requests.length === 0) && (
               <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-faint)', fontSize: '13px' }}>
                 尚無申請紀錄
               </div>
@@ -177,7 +203,11 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
                 <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-faint)', fontSize: '12px' }}>暫無公告</div>
               )}
               {data?.announcements?.slice(0, 4).map(a => (
-                <div key={a.id} className="d-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
+                <div key={a.id} style={{
+                  padding: '11px 16px',
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex', flexDirection: 'column', gap: '3px',
+                }}>
                   <div style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 400 }}>{a.title}</div>
                   <div style={{
                     fontFamily: 'var(--font-geist-mono), monospace',
@@ -189,7 +219,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
               ))}
             </div>
 
-            {/* Pending CTA — only show if has pending */}
+            {/* Pending CTA */}
             {!!data?.pending_approvals_count && (
               <Link href="/approvals" style={{
                 display: 'block', textDecoration: 'none',
@@ -232,11 +262,4 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
       </div>
     </>
   )
-}
-
-function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 12) return '早安'
-  if (h < 18) return '午安'
-  return '晚安'
 }
