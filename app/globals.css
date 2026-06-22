@@ -60,9 +60,9 @@
 }
 *::-webkit-scrollbar { display: none; }
 
-/* 可左右滑動的區塊 (KPI/表格): 原生捲軸維持全域隱藏，改用 ScrollX 元件自繪 DOM 捲軸
-   (macOS overlay 原生捲軸怎樣都隱藏，自繪 div 才 100% 可見可拖) */
-.scroll-x { overflow-x: auto; }
+/* 原生捲軸維持全域隱藏；可左右滑動的區塊改用 ScrollX 元件自繪 DOM 捲軸
+   (macOS overlay 原生捲軸怎樣都隱藏，自繪 div 才 100% 可見可拖)。
+   overflowX 由 ScrollX 內 div inline 提供，不需 .scroll-x class */
 body {
   background: var(--bg);
   color: var(--text);
