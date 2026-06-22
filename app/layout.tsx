@@ -15,9 +15,15 @@ export const viewport: Viewport = {
   maximumScale: 5,
 }
 
+// 在 hydration 前依 theme-mode 先設 dataset.theme，避免深色重整閃白 (FOUC)
+const themeInitScript = `(function(){try{var m=localStorage.getItem('theme-mode')||'light';var d=m==='dark'||(m==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d)document.documentElement.dataset.theme='dark';}catch(e){}})();`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-TW" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body style={{ fontFamily: 'var(--font-geist-sans), system-ui, sans-serif' }}>
         {children}
       </body>
