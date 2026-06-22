@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { visibleModules } from '@/lib/modules'
+import { visibleModules, MODULES } from '@/lib/modules'
 import { ROLE_LABELS } from '@/lib/rbac'
 import Icon from '@/components/Icon'
 
@@ -53,9 +53,12 @@ function NavItem({ href, icon, label, active, collapsed }: {
   )
 }
 
-export default function Sidebar({ roleCode }: { roleCode: string }) {
+export default function Sidebar({ roleCode, visibleCodes }: { roleCode: string; visibleCodes?: string[] }) {
   const pathname = usePathname()
-  const modules = visibleModules(roleCode)
+  // 權限管理編輯結果 (DB) 優先決定 sidebar 可見項；無則 fallback code roles_visible
+  const modules = visibleCodes && visibleCodes.length
+    ? MODULES.filter(m => visibleCodes.includes(m.code))
+    : visibleModules(roleCode)
   const [collapsed, setCollapsed] = useState(false)
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set())
   const [mobileOpen, setMobileOpen] = useState(false)

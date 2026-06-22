@@ -377,6 +377,8 @@ export const MODULES: Module[] = [
   },
   { code: 'bi', name: '報表 BI', icon: 'chart-bar-square', group: '治理 / 系統', kind: 'view', view: 'bi', roles_visible: ['hr', 'finance', 'executive', 'auditor', 'manager', 'it', 'admin_officer'] },
   { code: 'rbac', name: '權限管理', icon: 'lock-closed', group: '治理 / 系統', kind: 'view', view: 'rbac', roles_visible: ['hr', 'it', 'executive', 'auditor'] },
+  { code: 'forms', name: '表單設計器', icon: 'document-text', group: '治理 / 系統', kind: 'view', view: 'forms', roles_visible: ['hr', 'it', 'executive', 'admin_officer'] },
+  { code: 'workflows', name: '簽核流程設計', icon: 'arrows-right-left', group: '治理 / 系統', kind: 'view', view: 'workflows', roles_visible: ['hr', 'it', 'executive', 'admin_officer'] },
   { code: 'audit', name: '稽核日誌', icon: 'magnifying-glass', group: '治理 / 系統', kind: 'view', view: 'audit', roles_visible: ['auditor', 'hr', 'executive', 'it'] }
 ]
 

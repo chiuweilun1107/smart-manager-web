@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { CHAINS } from './chains'
+import { resolveChain } from './platform-config'
 import { MODULE_MAP } from './modules'
 import { sendEmail, approvalPendingEmail, requestResultEmail } from './email'
 import { dispatchWebhook } from './webhook'
@@ -130,7 +131,8 @@ async function buildTiers(client: SupabaseClient, chain: typeof CHAINS[string], 
 
 async function expandSteps(client: SupabaseClient, request: Record<string, unknown>, payload: Record<string, unknown>) {
   const mod = MODULE_MAP[String(request.module_code)]
-  const chain = mod && mod.chain ? CHAINS[mod.chain] : null
+  // DB 簽核流程樣板優先 (簽核流程設計器編輯結果) → fallback code CHAINS
+  const chain = mod && mod.chain ? await resolveChain(Number(request.company_id) || 1, mod.chain) : null
   if (!chain) {
     const hr = await getRole(client, 'hr')
     await db(client).from('approval_steps').insert({
@@ -239,6 +241,7 @@ async function createDetail(client: SupabaseClient, moduleCode: string, request:
 
 async function runPostHooks(client: SupabaseClient, request: Record<string, unknown>) {
   const mod = MODULE_MAP[String(request.module_code)]
+  // post-approve hooks 為系統副作用 (扣假/入帳等)，屬 code 邏輯非 admin 可配置 → 維持讀 code CHAINS
   const chain = mod && mod.chain ? CHAINS[mod.chain] : null
   const hooks = (chain?.post_approve_hooks) || []
   const payload = request.payload_json ? JSON.parse(String(request.payload_json)) : {}
