@@ -98,4 +98,5 @@ export interface SessionUser {
   departmentName: string | null
   managerId: number | null
   employeeNo: string | null
+  companyId: number
 }

@@ -26,6 +26,9 @@ export async function getSessionUser(): Promise<SessionUser> {
     departmentId: aiDoUser.department_id,
     departmentName: aiDoUser.departments?.name ?? null,
     managerId: aiDoUser.manager_user_id,
-    employeeNo: aiDoUser.employee_no
+    employeeNo: aiDoUser.employee_no,
+    // 容錯：multitenant migration apply 前 company_id 欄位不存在 → fallback 預設公司。
+    // apply 後自動帶真值，code 無需再改。
+    companyId: aiDoUser.company_id ?? 1
   }
 }
