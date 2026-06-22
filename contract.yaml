@@ -1,0 +1,28 @@
+editable_paths:
+  - next.config.mjs
+  - package.json
+  - components
+  - app
+  - lib/bpm.ts
+  - lib/rbac.ts
+
+frozen_paths:
+  - .env.local
+  - lib/supabase
+  - lib/session.ts
+  - middleware.ts
+  - supabase
+  - contract.yaml
+  - eval_manifest.yaml
+  - intent.md
+  - .env
+  - package.json
+
+forbidden_patterns:
+  - os.system
+  - NODE_ENV
+  - JEST_WORKER_ID
+  - PYTEST_CURRENT_TEST
+  - CI=
+  - skip
+  - xfail
