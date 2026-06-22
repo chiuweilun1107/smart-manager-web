@@ -1,6 +1,8 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { CHAINS } from './chains'
 import { MODULE_MAP } from './modules'
+import { sendEmail, approvalPendingEmail, requestResultEmail } from './email'
+import { dispatchWebhook } from './webhook'
 
 // ---------- helpers ----------
 function genNo(prefix: string) { return `${prefix.toUpperCase().slice(0, 4)}-${Date.now().toString().slice(-9)}` }
@@ -188,6 +190,13 @@ async function notifyActiveApprovers(client: SupabaseClient, requestId: number, 
     }
   }
   if (notifications.length) await db(client).from('notifications').insert(notifications)
+  // 同步寄 email (RESEND_API_KEY 未設則 graceful skip)
+  const uids = [...sent]
+  if (uids.length) {
+    const { data: us } = await db(client).from('users').select('email').in('id', uids).eq('status', 'active')
+    const { subject, html } = approvalPendingEmail(title)
+    await Promise.all((us || []).map((u: { email: string }) => u.email ? sendEmail({ to: u.email, subject, html }) : Promise.resolve()))
+  }
 }
 
 async function notifyRequester(client: SupabaseClient, request: Record<string, unknown>, title: string, body: string) {
@@ -195,6 +204,13 @@ async function notifyRequester(client: SupabaseClient, request: Record<string, u
     user_id: request.requester_user_id, channel: 'in_app', title, body,
     link_url: '/approvals', related_entity_type: 'requests', related_entity_id: request.id, status: 'sent'
   })
+  // 寄結果 email (graceful skip 無 key)
+  const { data: u } = await db(client).from('users').select('email').eq('id', request.requester_user_id).single()
+  if (u?.email) {
+    const result = title.includes('核准') ? '已核准' : title.includes('駁回') ? '已駁回' : title.includes('補件') ? '需補件' : '已更新'
+    const { subject, html } = requestResultEmail(String(request.title ?? ''), result)
+    await sendEmail({ to: u.email, subject, html })
+  }
 }
 
 async function createDetail(client: SupabaseClient, moduleCode: string, request: Record<string, unknown>, payload: Record<string, unknown>) {
@@ -356,6 +372,10 @@ export async function act(client: SupabaseClient, user: Record<string, unknown>,
         await recordAction(client, requestId, null, Number(user.id), 'system_approve', 'in_review', 'approved', '全部關卡完成', ctx)
         await runPostHooks(client, await getReq(client, requestId))
         await notifyRequester(client, request, '您的單已核准', `${request.title} 已完成簽核`)
+        // 對外 webhook: 簽核完成事件
+        await dispatchWebhook(Number(request.company_id ?? 1), 'request.approved', {
+          requestId, requestNo: request.request_no, title: request.title, moduleCode: request.module_code,
+        })
       }
     }
   } else if (action === 'reject') {

@@ -18,6 +18,26 @@ export const FIELD_FULL_ACCESS: Record<string, string[]> = {
   bank_account: ['finance', 'hr']
 }
 
+// ---- 操作級 (CRUD) 權限 ----
+export type Action = 'create' | 'read' | 'approve' | 'manage' | 'delete'
+
+export const ROLE_ACTIONS: Record<string, Action[]> = {
+  employee:     ['create', 'read'],
+  manager:      ['create', 'read', 'approve'],
+  hr:           ['create', 'read', 'approve', 'manage'],
+  it:           ['create', 'read', 'approve', 'manage'],
+  finance:      ['create', 'read', 'approve', 'manage'],
+  executive:    ['create', 'read', 'approve', 'manage', 'delete'],
+  admin_officer:['create', 'read', 'approve', 'manage'],
+  legal:        ['create', 'read', 'approve'],
+  auditor:      ['read'], // 稽核只讀，不可改資料
+}
+
+/** 操作級權限檢查：roleCode 是否可執行 action */
+export function canAct(roleCode: string, action: Action): boolean {
+  return (ROLE_ACTIONS[roleCode] || ['read']).includes(action)
+}
+
 export function canSeeField(field: string, roleCode: string, isSelf: boolean): boolean {
   if (isSelf) return true
   const allowed = FIELD_FULL_ACCESS[field]

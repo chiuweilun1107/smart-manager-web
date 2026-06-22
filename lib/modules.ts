@@ -1,4 +1,4 @@
-export type FieldType = 'text' | 'textarea' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'user'
+export type FieldType = 'text' | 'textarea' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'user' | 'file'
 export type ModuleKind = 'request' | 'record' | 'view'
 
 export interface ModuleField {
@@ -9,6 +9,10 @@ export interface ModuleField {
   options?: string[]
   placeholder?: string
   sensitive?: boolean
+  /** 條件顯示：依另一欄位的值決定本欄是否出現 (e.g. 金額>10000 才顯示預算科目) */
+  showIf?: { field: string; op: '>' | '>=' | '<' | '<=' | '=' | '!='; value: string | number }
+  /** 驗證規則：regex pattern / 數值範圍 / 自訂訊息 */
+  validate?: { pattern?: string; min?: number; max?: number; message?: string }
 }
 
 export interface ModuleColumn {

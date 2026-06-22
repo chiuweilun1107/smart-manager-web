@@ -1,0 +1,73 @@
+import { describe, it, expect } from 'vitest'
+import { encrypt, decrypt, last4 } from '../lib/crypto'
+import { toCsv } from '../lib/export'
+import { getCompanyId, withCompany, DEFAULT_COMPANY_ID } from '../lib/company'
+import { t } from '../lib/i18n'
+import { formatInTimezone } from '../lib/timezone'
+
+describe('crypto', () => {
+  it('encrypt/decrypt round-trip 還原原文', () => {
+    const plain = 'A123456789'
+    const enc = encrypt(plain)
+    expect(enc).not.toBe(plain)
+    expect(decrypt(enc)).toBe(plain)
+  })
+  it('每次加密 IV 不同 (ciphertext 不重複)', () => {
+    expect(encrypt('same')).not.toBe(encrypt('same'))
+  })
+  it('竄改密文會 throw (GCM auth tag)', () => {
+    const enc = encrypt('secret')
+    const tampered = enc.slice(0, -4) + (enc.slice(-4) === 'AAAA' ? 'BBBB' : 'AAAA')
+    expect(() => decrypt(tampered)).toThrow()
+  })
+  it('last4 取末四碼', () => {
+    expect(last4('A123456789')).toBe('6789')
+    expect(last4('abc')).toBe('abc')
+  })
+})
+
+describe('export.toCsv', () => {
+  it('產生含 BOM 的 CSV header+rows', () => {
+    const csv = toCsv([{ a: 1, b: 'x' }], [{ key: 'a', label: '數' }, { key: 'b', label: '字' }])
+    expect(csv.charCodeAt(0)).toBe(0xFEFF)
+    expect(csv).toContain('數,字')
+    expect(csv).toContain('1,x')
+  })
+  it('含逗號/引號的值會被正確 escape', () => {
+    const csv = toCsv([{ a: 'x,y', b: 'has"quote' }], [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }])
+    expect(csv).toContain('"x,y"')
+    expect(csv).toContain('"has""quote"')
+  })
+})
+
+describe('company', () => {
+  it('getCompanyId 回傳 user.companyId', () => {
+    expect(getCompanyId({ companyId: 7 })).toBe(7)
+  })
+  it('getCompanyId fallback 預設公司', () => {
+    expect(getCompanyId({ companyId: undefined as unknown as number })).toBe(DEFAULT_COMPANY_ID)
+  })
+  it('withCompany 補 company_id', () => {
+    expect(withCompany({ x: 1 }, 3)).toEqual({ x: 1, company_id: 3 })
+  })
+})
+
+describe('i18n', () => {
+  it('t 取對應語系', () => {
+    expect(t('status.approved', 'zh-TW')).toBe('已核准')
+    expect(t('status.approved', 'en')).toBe('Approved')
+  })
+  it('t 未知 key 回 key 本身', () => {
+    expect(t('nonexistent.key')).toBe('nonexistent.key')
+  })
+})
+
+describe('timezone', () => {
+  it('formatInTimezone 不丟錯且含日期', () => {
+    const s = formatInTimezone('2026-06-22T10:00:00Z', 'Asia/Taipei')
+    expect(s).toContain('2026')
+  })
+  it('無效日期回 dash', () => {
+    expect(formatInTimezone('not-a-date')).toBe('—')
+  })
+})

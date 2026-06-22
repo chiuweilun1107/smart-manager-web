@@ -9,3 +9,4 @@ node_modules/
 system/
 *.json.gz_*
 lh-*.json
+tsconfig.tsbuildinfo

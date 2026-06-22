@@ -115,7 +115,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
         )}
 
         {/* KPI row */}
-        <div className="d-card" style={{
+        <div className="d-card rwd-kpi" style={{
           display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
           marginBottom: '20px',
         }}>
@@ -144,7 +144,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
         </div>
 
         {/* Main content grid: 3:2 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '16px', marginBottom: '20px' }}>
+        <div className="rwd-cols-2" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '16px', marginBottom: '20px' }}>
 
           {/* Recent requests */}
           <div className="d-card">

@@ -95,3 +95,13 @@ body {
 .status-returned   { @apply chip chip--returned; }
 .status-draft      { @apply chip chip--draft; }
 .status-cancelled  { @apply chip chip--cancelled; }
+
+/* ============ RWD 響應式 ============ */
+@media (max-width: 768px) {
+  main { padding: 14px !important; }
+  .rwd-cols-2 { grid-template-columns: 1fr !important; }
+  .rwd-kpi { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 480px) {
+  .rwd-kpi { grid-template-columns: 1fr !important; }
+}
