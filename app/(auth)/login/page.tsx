@@ -51,21 +51,27 @@ export default function LoginPage() {
     <>
       <style>{`
         .login-shell {
-          display: flex; min-height: 100vh;
+          display: flex; justify-content: center; min-height: 100vh;
           background-color: var(--bg);
           background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
-          background-size: 40px 40px;
+          background-size: 38px 38px;
+          background-position: center center;
+        }
+        /* 內容容器置中：寬螢幕內容不拉開，grid 在兩側延伸 */
+        .login-inner {
+          width: 100%; max-width: 1160px; display: flex; align-items: stretch;
+          border-left: 1px solid var(--border); border-right: 1px solid var(--border);
         }
         .login-brand {
-          width: 44%; position: relative; overflow: hidden;
-          padding: 48px 44px; display: flex; flex-direction: column; justify-content: space-between;
+          flex: 0 0 45%; position: relative; overflow: hidden;
+          padding: 56px 48px; display: flex; flex-direction: column; justify-content: space-between;
           border-right: 1px solid var(--border);
         }
-        .login-formcol { width: 56%; display: flex; align-items: center; justify-content: center; padding: 40px 32px; }
-        .login-formwrap { width: 100%; max-width: 380px; }
+        .login-formcol { flex: 1; display: flex; align-items: center; justify-content: center; padding: 48px 44px; }
+        .login-formwrap { width: 100%; max-width: 360px; }
         .login-mobilelogo { display: none; align-items: center; justify-content: center; gap: 10px; margin-bottom: 24px; }
         @media (max-width: 900px) {
-          .login-shell { flex-direction: column; }
+          .login-inner { flex-direction: column; border-left: none; border-right: none; max-width: 460px; }
           .login-brand { display: none; }
           .login-formcol { width: 100%; padding: 32px 20px; }
           .login-mobilelogo { display: flex; }
@@ -73,6 +79,7 @@ export default function LoginPage() {
       `}</style>
 
       <div className="login-shell">
+        <div className="login-inner">
         {/* 左：品牌敘事 (Dossier) */}
         <div className="login-brand">
           {/* 背景 Flow Mark 低透明 */}
@@ -185,6 +192,7 @@ export default function LoginPage() {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </>
