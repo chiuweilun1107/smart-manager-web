@@ -319,7 +319,7 @@ export const MODULES: Module[] = [
   },
   { code: 'workforce', name: '人力編制', icon: 'chart-bar', group: '人資', kind: 'view', view: 'workforce', roles_visible: ['hr', 'manager', 'finance', 'executive', 'auditor'] },
   {
-    code: 'announcement', name: '公告', icon: 'megaphone', group: '治理 / 系統', kind: 'record', table: 'announcements', roles_visible: ALL,
+    code: 'announcement', name: '公告', icon: 'newspaper', group: '治理 / 系統', kind: 'record', table: 'announcements', roles_visible: ALL,
     fields: [
       { key: 'title', label: '標題', type: 'text', required: true },
       { key: 'body', label: '內容', type: 'textarea', required: true },

@@ -31,9 +31,14 @@ export default function TopBar({ user }: { user: SessionUser }) {
   }
 
   async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
-    router.refresh()
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } finally {
+      // Always navigate away, even if the logout request fails — at minimum
+      // the client leaves the protected view.
+      router.push('/login')
+      router.refresh()
+    }
   }
 
   return (
