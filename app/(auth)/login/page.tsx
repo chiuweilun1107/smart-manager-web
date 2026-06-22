@@ -50,16 +50,18 @@ export default function LoginPage() {
   return (
     <>
       <style>{`
-        .login-shell { display: flex; min-height: 100vh; }
-        .login-brand {
-          width: 44%; position: relative; overflow: hidden;
-          padding: 48px 44px; display: flex; flex-direction: column; justify-content: space-between;
-          border-right: 1px solid var(--border);
+        .login-shell {
+          display: flex; min-height: 100vh;
           background-color: var(--bg);
           background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
           background-size: 40px 40px;
         }
-        .login-formcol { width: 56%; display: flex; align-items: center; justify-content: center; padding: 40px 32px; background: var(--bg); }
+        .login-brand {
+          width: 44%; position: relative; overflow: hidden;
+          padding: 48px 44px; display: flex; flex-direction: column; justify-content: space-between;
+          border-right: 1px solid var(--border);
+        }
+        .login-formcol { width: 56%; display: flex; align-items: center; justify-content: center; padding: 40px 32px; }
         .login-formwrap { width: 100%; max-width: 380px; }
         .login-mobilelogo { display: none; }
         @media (max-width: 900px) {
@@ -125,10 +127,15 @@ export default function LoginPage() {
         <div className="login-formcol">
           <div className="login-formwrap">
             {/* 手機 logo */}
-            <div className="login-mobilelogo" style={{ textAlign: 'center', marginBottom: '24px' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/brand/aido-app-icon.png" alt="AiDo 智行" width={52} height={52} style={{ borderRadius: '12px', marginBottom: '10px', display: 'inline-block' }} />
-              <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text)', margin: 0 }}>AiDo 智行</h1>
+            <div className="login-mobilelogo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '24px' }}>
+              <svg width="42" height="26" viewBox="50 46 656 406" fill="none" aria-label="AiDo">
+                <g strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M88 316 L214 84 L340 316" stroke="var(--text)" strokeWidth="62"/>
+                  <path d="M328 112 H524 C612 112 668 166 668 240 C668 314 612 364 524 364 H224" stroke="var(--text)" strokeWidth="62"/>
+                  <path d="M174 414 C204 344 268 318 356 318" stroke="var(--primary)" strokeWidth="62"/>
+                </g>
+              </svg>
+              <span style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em' }}>AiDo 智行</span>
             </div>
 
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px' }}>
