@@ -46,7 +46,12 @@
   --info-bg: rgba(59, 130, 246, 0.06);
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar { display: none; }
 body {
   background: var(--bg);
   color: var(--text);
