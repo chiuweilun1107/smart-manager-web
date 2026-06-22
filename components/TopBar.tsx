@@ -33,6 +33,7 @@ export default function TopBar({ user }: { user: SessionUser }) {
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/login')
+    router.refresh()
   }
 
   return (

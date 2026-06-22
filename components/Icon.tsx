@@ -42,11 +42,14 @@ interface IconProps {
 export default function Icon({ name, className = '', size = 18 }: IconProps) {
   const d = PATHS[name]
   if (!d) return null
+  // viewBox "-1.5 -1.5 27 27" adds 1.5u padding on every side so glyphs whose
+  // path hugs the edge (e.g. megaphone starts at x=1.3) get breathing room and
+  // don't look visually clipped. 27 = 24 + 1.5*2.
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
-      viewBox="0 0 24 24"
+      viewBox="-1.5 -1.5 27 27"
       strokeWidth={1.5}
       stroke="currentColor"
       width={size}
