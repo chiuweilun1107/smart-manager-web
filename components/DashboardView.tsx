@@ -1,7 +1,39 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, type ReactNode, type CSSProperties } from 'react'
 import Link from 'next/link'
 import type { SessionUser } from '@/lib/types'
+
+// 可左右滑動容器 + 浮動箭頭按鈕 (不依賴系統捲軸顯示，macOS overlay scrollbar 靜態隱藏也能操作)
+function ScrollX({ children, style, className }: { children: ReactNode; style?: CSSProperties; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [canL, setCanL] = useState(false)
+  const [canR, setCanR] = useState(false)
+  useEffect(() => {
+    const el = ref.current; if (!el) return
+    const update = () => {
+      setCanL(el.scrollLeft > 4)
+      setCanR(el.scrollLeft < el.scrollWidth - el.clientWidth - 4)
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
+  }, [children])
+  const go = (dir: number) => ref.current?.scrollBy({ left: dir * 280, behavior: 'smooth' })
+  const arrow = (side: 'left' | 'right'): CSSProperties => ({
+    position: 'absolute', top: '50%', transform: 'translateY(-50%)', [side]: '8px',
+    width: '34px', height: '34px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--text)',
+    boxShadow: '0 2px 10px rgba(0,0,0,0.14)', cursor: 'pointer', zIndex: 5, fontSize: '20px', lineHeight: 1, padding: 0,
+  })
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={ref} className={className} style={{ ...style, overflowX: 'auto' }}>{children}</div>
+      {canL && <button aria-label="向左滑動" onClick={() => go(-1)} style={arrow('left')}>‹</button>}
+      {canR && <button aria-label="向右滑動" onClick={() => go(1)} style={arrow('right')}>›</button>}
+    </div>
+  )
+}
 
 interface DashConfig { title: string; link: string }
 interface DashData {
@@ -107,7 +139,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
   function renderBlock(id: BlockId) {
     switch (id) {
       case 'kpi': return (
-        <div className="rwd-kpi scroll-x" style={{ ...card, display: 'grid', gridTemplateColumns: 'repeat(6, minmax(150px, 1fr))' }}>
+        <ScrollX className="rwd-kpi scroll-x" style={{ ...card, display: 'grid', gridTemplateColumns: 'repeat(6, minmax(150px, 1fr))' }}>
           {kpis.map((k, i) => (
             <div key={k.label} style={{ padding: '18px 20px', borderRight: i < kpis.length - 1 ? '1px solid var(--border)' : 'none', position: 'relative' }}>
               {k.accent && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'var(--primary)' }} />}
@@ -118,7 +150,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
               </div>
             </div>
           ))}
-        </div>
+        </ScrollX>
       )
       case 'inbox': return (
         <div style={{ ...card, overflow: 'hidden' }}>
@@ -126,7 +158,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
             <h3 style={sectionTitle}>待簽核清單 <span className="label-mono" style={{ marginLeft: '6px' }}>/ INBOX</span></h3>
             <Link href="/approvals" style={{ fontSize: '12px', color: 'var(--primary)', textDecoration: 'none', fontWeight: 600 }}>查看全部 →</Link>
           </div>
-          <div className="scroll-x">
+          <ScrollX className="scroll-x">
             <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', minWidth: '640px' }}>
               <thead><tr style={{ background: 'var(--surface-2)' }}>{['申請單號', '類型', '主旨', '金額/天數', '狀態', '申請日'].map(h => <th key={h} className="label-mono" style={{ padding: '9px 16px', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
               <tbody>
@@ -144,7 +176,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollX>
         </div>
       )
       case 'leave-donut': return (
