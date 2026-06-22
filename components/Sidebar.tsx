@@ -88,12 +88,10 @@ export default function Sidebar({ roleCode }: { roleCode: string }) {
 
   return (
     <>
-    {!mobileOpen && (
-      <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)} aria-label="開啟選單"
-        style={{ alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', cursor: 'pointer', width: '38px', height: '38px' }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
-    )}
+    <button className={`mobile-menu-btn${mobileOpen ? ' is-open' : ''}`} onClick={() => setMobileOpen(true)} aria-label="開啟選單"
+      style={{ alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', cursor: 'pointer', width: '38px', height: '38px' }}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
     {mobileOpen && <div className="mobile-overlay" onClick={() => setMobileOpen(false)} />}
     <aside className={`app-sidebar${mobileOpen ? ' open' : ''}`} style={{
       width: sideW, minWidth: sideW,

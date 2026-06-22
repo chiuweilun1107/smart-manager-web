@@ -106,10 +106,19 @@ body {
   main { padding: 14px !important; }
   .rwd-cols-2 { grid-template-columns: 1fr !important; }
   .rwd-cols-3 { grid-template-columns: 1fr !important; }
-  .rwd-kpi { grid-template-columns: repeat(2, 1fr) !important; }
+  /* KPI 手機改水平滑動: 6 格一排可左右滑，每格 47% 寬 (露出下一格暗示可滑) */
+  .rwd-kpi {
+    grid-template-columns: none !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: 47% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tb-roleinfo { display: none !important; }
 }
 @media (max-width: 480px) {
-  .rwd-kpi { grid-template-columns: repeat(2, 1fr) !important; }
+  /* ≤480 KPI 每格再寬一點 (露出半格暗示可滑) */
+  .rwd-kpi { grid-auto-columns: 60% !important; }
 }
 
 /* ============ 手機 sidebar drawer ============ */
@@ -118,10 +127,13 @@ body {
 @media (max-width: 768px) {
   .mobile-menu-btn {
     display: flex; position: fixed; top: 12px; left: 12px; z-index: 60;
+    opacity: 1; transition: opacity 0.2s ease 0.28s;
   }
+  /* drawer 開啟時漢堡快速淡出；關閉時延遲 0.28s 等 drawer 滑出再淡入，避免重疊 */
+  .mobile-menu-btn.is-open { opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
   .app-sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; height: 100vh; z-index: 55;
-    transform: translateX(-100%);
+    transform: translateX(-100%); transition: transform 0.28s ease;
   }
   .app-sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,0.5); }
   .mobile-overlay {

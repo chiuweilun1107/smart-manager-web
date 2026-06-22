@@ -87,7 +87,7 @@ export default function LoginPage() {
           <div style={{ position: 'relative' }}>
             <div style={{ marginBottom: '20px' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/brand/aido-logo-horizontal.png" alt="AiDo 智行" style={{ height: '40px', width: 'auto', display: 'block' }} className="login-logo-img" />
+              <img src="/brand/aido-logo-horizontal.png" alt="AiDo 智行" style={{ height: '56px', width: 'auto', display: 'block' }} className="login-logo-img" />
             </div>
             <h1 style={{ fontSize: '30px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.04em', lineHeight: 1.2, margin: '0 0 14px' }}>
               企業 AI 行政管理平台
@@ -119,7 +119,7 @@ export default function LoginPage() {
             {/* 手機 logo */}
             <div className="login-mobilelogo">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/brand/aido-logo-horizontal.png" alt="AiDo 智行" style={{ height: '34px', width: 'auto' }} />
+              <img src="/brand/aido-logo-horizontal.png" alt="AiDo 智行" style={{ height: '46px', width: 'auto' }} />
             </div>
 
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px' }}>

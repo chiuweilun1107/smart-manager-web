@@ -143,17 +143,19 @@ export default function TopBar({ user }: { user: SessionUser }) {
       </button>
 
       {/* 部門 / 角色 資訊 (通知之後、用戶名之前；先部門再角色) */}
-      <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px', fontFamily: 'var(--font-geist-mono), monospace' }}>
-        {user.departmentName && (
-          <>
-            <span style={{ color: 'var(--text-faint)' }}>部門 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.departmentName}</span></span>
-            <span style={{ color: 'var(--border-strong)' }}>|</span>
-          </>
-        )}
-        <span style={{ color: 'var(--text-faint)' }}>角色 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.roleName}</span></span>
+      <div className="tb-roleinfo" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px', fontFamily: 'var(--font-geist-mono), monospace', whiteSpace: 'nowrap' }}>
+          {user.departmentName && (
+            <>
+              <span style={{ color: 'var(--text-faint)' }}>部門 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.departmentName}</span></span>
+              <span style={{ color: 'var(--border-strong)' }}>|</span>
+            </>
+          )}
+          <span style={{ color: 'var(--text-faint)' }}>角色 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.roleName}</span></span>
+        </div>
+        <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
       </div>
-      <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <div style={{
