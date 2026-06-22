@@ -35,21 +35,22 @@
 }
 
 [data-theme="dark"] {
-  --bg: #0E0C0A;
-  --surface: #1A1613;
-  --surface-2: #221D18;
+  /* 暖深褐 (Allen 選定，與淺色暖白同色溫，切換不跳 tone) */
+  --bg: #1A1613;
+  --surface: #221D18;
+  --surface-2: #2A241E;
   --border: #2E2820;
   --border-strong: #463C30;
   --text: #F2ECE0;
   --text-muted: #A89E8E;
-  --text-faint: #6E655A;
+  --text-faint: #7A7062;
   --primary: #E0552F;
   --primary-hover: #C8431F;
-  --primary-light: rgba(224, 85, 47, 0.13);
-  --success-bg: rgba(46, 125, 82, 0.16);
-  --warning-bg: rgba(194, 116, 26, 0.16);
-  --danger-bg: rgba(192, 57, 43, 0.16);
-  --info-bg: rgba(45, 108, 181, 0.16);
+  --primary-light: rgba(224, 85, 47, 0.14);
+  --success: #4CAF7D; --success-bg: rgba(76, 175, 125, 0.16);
+  --warning: #D9943A; --warning-bg: rgba(217, 148, 58, 0.16);
+  --danger: #E05546;  --danger-bg: rgba(224, 85, 70, 0.16);
+  --info: #5B9BD5;    --info-bg: rgba(91, 155, 213, 0.16);
 }
 
 * {

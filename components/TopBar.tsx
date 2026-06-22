@@ -1,25 +1,41 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { SessionUser } from '@/lib/types'
+
+type ThemeMode = 'light' | 'dark' | 'system'
+
+function systemPrefersDark() {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+function applyMode(mode: ThemeMode) {
+  const dark = mode === 'dark' || (mode === 'system' && systemPrefersDark())
+  if (dark) document.documentElement.dataset.theme = 'dark'
+  else delete document.documentElement.dataset.theme
+}
 
 export default function TopBar({ user }: { user: SessionUser }) {
   const router = useRouter()
   const [initials, setInitials] = useState('')
-  const [isDark, setIsDark] = useState<boolean | null>(null)
+  const [themeMode, setThemeMode] = useState<ThemeMode | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const name = user.displayName || user.email || ''
     setInitials(name.slice(0, 2).toUpperCase())
-    const saved = localStorage.getItem('theme')
-    const dark = saved === 'dark'
-    setIsDark(dark)
-    if (dark) document.documentElement.dataset.theme = 'dark'
-    else delete document.documentElement.dataset.theme
+    const saved = (localStorage.getItem('theme-mode') as ThemeMode) || 'light'
+    setThemeMode(saved)
+    applyMode(saved)
+    // 跟隨系統時，監聽 OS 深淺變更
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => { if ((localStorage.getItem('theme-mode') as ThemeMode) === 'system') applyMode('system') }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
   }, [user.displayName, user.email])
 
-  // scroll-aware：主內容下拉時才出現分隔線/陰影 (平常與內容同底色)
+  // scroll-aware：主內容下拉時才出現分隔線/陰影
   useEffect(() => {
     const main = document.querySelector('main')
     if (!main) return
@@ -28,13 +44,16 @@ export default function TopBar({ user }: { user: SessionUser }) {
     return () => main.removeEventListener('scroll', onScroll)
   }, [])
 
-  function toggleTheme() {
-    const html = document.documentElement
-    if (html.dataset.theme === 'dark') {
-      delete html.dataset.theme; localStorage.setItem('theme', 'light'); setIsDark(false)
-    } else {
-      html.dataset.theme = 'dark'; localStorage.setItem('theme', 'dark'); setIsDark(true)
-    }
+  // 點選單外關閉
+  useEffect(() => {
+    if (!menuOpen) return
+    const onClick = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false) }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [menuOpen])
+
+  function pickMode(mode: ThemeMode) {
+    setThemeMode(mode); localStorage.setItem('theme-mode', mode); applyMode(mode); setMenuOpen(false)
   }
 
   async function logout() {
@@ -42,12 +61,19 @@ export default function TopBar({ user }: { user: SessionUser }) {
     finally { router.push('/login'); router.refresh() }
   }
 
+  const effectiveDark = themeMode === 'dark' || (themeMode === 'system' && systemPrefersDark())
   const iconBtn: React.CSSProperties = {
     width: '32px', height: '32px', borderRadius: 'var(--radius)',
     background: 'transparent', border: 'none', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     color: 'var(--text-muted)', transition: 'color 0.15s ease',
   }
+
+  const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: React.ReactNode }[] = [
+    { mode: 'light', label: '淺色', icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg> },
+    { mode: 'dark', label: '深色', icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> },
+    { mode: 'system', label: '跟隨系統', icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> },
+  ]
 
   return (
     <header style={{
@@ -65,7 +91,6 @@ export default function TopBar({ user }: { user: SessionUser }) {
 
       <div style={{ flex: 1 }} />
 
-      {/* 角色 / 部門 資訊 (依示意圖) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px', fontFamily: 'var(--font-geist-mono), monospace' }}>
         <span style={{ color: 'var(--text-faint)' }}>角色 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.roleName}</span></span>
         {user.departmentName && (
@@ -78,20 +103,47 @@ export default function TopBar({ user }: { user: SessionUser }) {
 
       <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
 
-      {isDark !== null && (
-        <button onClick={toggleTheme} aria-label={isDark ? '切換淺色模式' : '切換深色模式'} title={isDark ? '切換淺色模式' : '切換深色模式'} style={iconBtn}
-          onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text)')}
-          onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-muted)')}>
-          {isDark ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}>
-              <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-            </svg>
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}>
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-            </svg>
+      {/* 主題三態切換 (淺色/深色/跟隨系統) */}
+      {themeMode !== null && (
+        <div ref={menuRef} style={{ position: 'relative' }}>
+          <button onClick={() => setMenuOpen(o => !o)} aria-label="主題設定" title="主題設定" style={iconBtn}
+            onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text)')}
+            onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-muted)')}>
+            {effectiveDark ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+            )}
+          </button>
+          {menuOpen && (
+            <div style={{
+              position: 'absolute', top: '40px', right: 0, zIndex: 100,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              padding: '4px', minWidth: '150px',
+            }}>
+              {THEME_OPTIONS.map(opt => {
+                const sel = themeMode === opt.mode
+                return (
+                  <button key={opt.mode} onClick={() => pickMode(opt.mode)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                      padding: '8px 10px', background: sel ? 'var(--primary-light)' : 'transparent',
+                      border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                      color: sel ? 'var(--primary)' : 'var(--text-muted)', fontSize: '13px',
+                      fontWeight: sel ? 600 : 400, textAlign: 'left',
+                    }}
+                    onMouseEnter={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)' }}
+                    onMouseLeave={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
+                    <span style={{ display: 'flex', flexShrink: 0 }}>{opt.icon}</span>
+                    <span style={{ flex: 1 }}>{opt.label}</span>
+                    {sel && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ overflow: 'visible' }}><polyline points="20 6 9 17 4 12"/></svg>}
+                  </button>
+                )
+              })}
+            </div>
           )}
-        </button>
+        </div>
       )}
 
       <button aria-label="通知" style={iconBtn}
