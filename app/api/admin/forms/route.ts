@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/session'
+import { requireAdminUser } from '@/lib/api-guard'
 import type { ModuleField, ModuleColumn } from '@/lib/modules'
 
 // GET /api/admin/forms — 列出該 company 所有 form_definitions
 export async function GET() {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const db = createServiceClient().schema('aido')
 
   const { data, error } = await db
@@ -21,7 +22,8 @@ export async function GET() {
 
 // POST /api/admin/forms — 新增表單
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const body = await req.json()
   const { module_code, form_code, name, icon, group_name, chain_code, sort_order } = body
 
@@ -55,7 +57,8 @@ export async function POST(req: NextRequest) {
 
 // PUT /api/admin/forms — 編輯表單（主要存 fields_json/columns_json/name/chain_code/is_active）
 export async function PUT(req: NextRequest) {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const body = await req.json()
   const { id, name, icon, group_name, chain_code, is_active, fields_json, columns_json, sort_order } = body
 
@@ -96,7 +99,8 @@ export async function PUT(req: NextRequest) {
 
 // DELETE /api/admin/forms?id= — 刪除表單
 export async function DELETE(req: NextRequest) {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const { searchParams } = new URL(req.url)
   const id = Number(searchParams.get('id'))
   if (!id) return NextResponse.json({ error: '缺少 id' }, { status: 400 })

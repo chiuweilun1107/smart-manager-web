@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/session'
+import { requireAdminUser } from '@/lib/api-guard'
 
 // GET /api/admin/workflows — 列該 company 所有 approval_chain_templates + roles 清單
 export async function GET() {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const db = createServiceClient().schema('aido')
 
   const [tplResult, rolesResult] = await Promise.all([
@@ -29,7 +30,8 @@ export async function GET() {
 
 // POST /api/admin/workflows — 新增流程
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const body = await req.json()
   const { chain_code, name, module_code, amount_field, steps_json } = body
 
@@ -54,7 +56,8 @@ export async function POST(req: NextRequest) {
 
 // PUT /api/admin/workflows — 更新流程
 export async function PUT(req: NextRequest) {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const body = await req.json()
   const { id, name, module_code, amount_field, steps_json, is_active } = body
 
@@ -81,7 +84,8 @@ export async function PUT(req: NextRequest) {
 
 // DELETE /api/admin/workflows?id=xxx
 export async function DELETE(req: NextRequest) {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id 為必填' }, { status: 400 })
 

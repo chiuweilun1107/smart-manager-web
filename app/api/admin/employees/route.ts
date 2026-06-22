@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/session'
+import { ADMIN_ROLES } from '@/lib/api-guard'
 
-const ADMIN_ROLES = ['admin', 'hr', 'executive', 'it']
 const VALID_STATUSES = ['active', 'inactive', 'resigned']
 function requireAdmin(roleCode: string) {
   return ADMIN_ROLES.includes(roleCode)

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { getSessionUser } from '@/lib/session'
+import { requireAdminUser } from '@/lib/api-guard'
 
 // GET /api/admin/rbac
 // 回傳該公司的 roles 清單 + role_permissions + role_field_access
 export async function GET() {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const db = createServiceClient().schema('aido')
 
   const [rolesResult, permsResult, fieldResult] = await Promise.all([
@@ -35,7 +36,8 @@ export async function GET() {
 // PUT /api/admin/rbac
 // upsert 一筆 role_permission: { role_code, module_code, visible, actions, read_scope }
 export async function PUT(req: NextRequest) {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const body = await req.json()
   const { role_code, module_code, visible, actions, read_scope } = body
 
@@ -67,7 +69,8 @@ export async function PUT(req: NextRequest) {
 // POST /api/admin/rbac
 // upsert role_field_access: { role_code, field_key, allowed }
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser()
+  const { user, error: authErr } = await requireAdminUser()
+  if (authErr) return authErr
   const body = await req.json()
   const { role_code, field_key, allowed } = body
 
