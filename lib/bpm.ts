@@ -134,7 +134,7 @@ async function expandSteps(client: SupabaseClient, request: Record<string, unkno
   if (!chain) {
     const hr = await getRole(client, 'hr')
     await db(client).from('approval_steps').insert({
-      request_id: request.id, step_no: 10, step_type: 'serial', name: 'HR 備查',
+      request_id: request.id, company_id: request.company_id, step_no: 10, step_type: 'serial', name: 'HR 備查',
       approver_type: 'role', approver_role_id: hr?.id ?? null, required_mode: 'any', status: 'active', started_at: new Date().toISOString()
     })
     return
@@ -152,7 +152,7 @@ async function expandSteps(client: SupabaseClient, request: Record<string, unkno
     const active = i === 0
     for (const a of t.approvers) {
       rows.push({
-        request_id: request.id, step_no: stepNo, step_type: t.type, name: t.name,
+        request_id: request.id, company_id: request.company_id, step_no: stepNo, step_type: t.type, name: t.name,
         approver_type: a.approver_type, approver_user_id: a.approver_user_id || null,
         approver_role_id: a.approver_role_id || null, required_mode: t.required,
         status: active ? 'active' : 'pending',
@@ -175,6 +175,8 @@ async function syncCurrentStep(client: SupabaseClient, requestId: number) {
 async function notifyActiveApprovers(client: SupabaseClient, requestId: number, title: string) {
   const { data: steps } = await db(client).from('approval_steps').select('*').eq('request_id', requestId).eq('status', 'active')
   if (!steps) return
+  const { data: reqRow } = await db(client).from('requests').select('company_id').eq('id', requestId).single()
+  const companyId = reqRow?.company_id ?? 1
   const sent = new Set<number>()
   const notifications = []
   for (const st of steps) {
@@ -186,7 +188,7 @@ async function notifyActiveApprovers(client: SupabaseClient, requestId: number, 
     }
     for (const uid of recipients) {
       if (sent.has(uid)) continue; sent.add(uid)
-      notifications.push({ user_id: uid, channel: 'in_app', title: '待簽核', body: `請簽核：${title}`, link_url: '/approvals', related_entity_type: 'requests', related_entity_id: requestId, status: 'sent' })
+      notifications.push({ company_id: companyId, user_id: uid, channel: 'in_app', title: '待簽核', body: `請簽核：${title}`, link_url: '/approvals', related_entity_type: 'requests', related_entity_id: requestId, status: 'sent' })
     }
   }
   if (notifications.length) await db(client).from('notifications').insert(notifications)
@@ -201,7 +203,7 @@ async function notifyActiveApprovers(client: SupabaseClient, requestId: number, 
 
 async function notifyRequester(client: SupabaseClient, request: Record<string, unknown>, title: string, body: string) {
   await db(client).from('notifications').insert({
-    user_id: request.requester_user_id, channel: 'in_app', title, body,
+    company_id: request.company_id ?? 1, user_id: request.requester_user_id, channel: 'in_app', title, body,
     link_url: '/approvals', related_entity_type: 'requests', related_entity_id: request.id, status: 'sent'
   })
   // 寄結果 email (graceful skip 無 key)
@@ -216,21 +218,21 @@ async function notifyRequester(client: SupabaseClient, request: Record<string, u
 async function createDetail(client: SupabaseClient, moduleCode: string, request: Record<string, unknown>, payload: Record<string, unknown>) {
   switch (moduleCode) {
     case 'expense':
-      await db(client).from('expense_claims').insert({ request_id: request.id, user_id: request.requester_user_id, expense_date: payload.expense_date, category: payload.category, amount: request.amount, tax_id: payload.tax_id || null, payment_status: 'unpaid' }); break
+      await db(client).from('expense_claims').insert({ request_id: request.id, company_id: request.company_id, user_id: request.requester_user_id, expense_date: payload.expense_date, category: payload.category, amount: request.amount, tax_id: payload.tax_id || null, payment_status: 'unpaid' }); break
     case 'procurement':
-      await db(client).from('purchase_orders').insert({ request_id: request.id, requester_user_id: request.requester_user_id, vendor: payload.vendor || null, category: payload.category || null, amount: request.amount, budget_code: payload.budget_code || null, status: 'requested' }); break
+      await db(client).from('purchase_orders').insert({ request_id: request.id, company_id: request.company_id, requester_user_id: request.requester_user_id, vendor: payload.vendor || null, category: payload.category || null, amount: request.amount, budget_code: payload.budget_code || null, status: 'requested' }); break
     case 'seal':
-      await db(client).from('seal_requests').insert({ request_id: request.id, requester_user_id: request.requester_user_id, seal_type: payload.seal_type, document_title: payload.document_title, purpose: payload.purpose || null, counterparty: payload.counterparty || null, legal_required: intFromOption(payload.legal_required) === 1 }); break
+      await db(client).from('seal_requests').insert({ request_id: request.id, company_id: request.company_id, requester_user_id: request.requester_user_id, seal_type: payload.seal_type, document_title: payload.document_title, purpose: payload.purpose || null, counterparty: payload.counterparty || null, legal_required: intFromOption(payload.legal_required) === 1 }); break
     case 'overtime':
-      await db(client).from('overtime_records').insert({ request_id: request.id, user_id: request.requester_user_id, work_date: payload.work_date, start_at: payload.start_at, end_at: payload.end_at, minutes: Number(payload.minutes) || 0, day_type: payload.day_type || 'workday', status: 'pending' }); break
+      await db(client).from('overtime_records').insert({ request_id: request.id, company_id: request.company_id, user_id: request.requester_user_id, work_date: payload.work_date, start_at: payload.start_at, end_at: payload.end_at, minutes: Number(payload.minutes) || 0, day_type: payload.day_type || 'workday', status: 'pending' }); break
     case 'attendance_correction':
-      await db(client).from('attendance_corrections').insert({ request_id: request.id, correction_type: payload.correction_type, proposed_clock_in_at: payload.proposed_time, reason: payload.reason || null }); break
+      await db(client).from('attendance_corrections').insert({ request_id: request.id, company_id: request.company_id, correction_type: payload.correction_type, proposed_clock_in_at: payload.proposed_time, reason: payload.reason || null }); break
     case 'benefit':
-      await db(client).from('benefit_claims').insert({ request_id: request.id, user_id: request.requester_user_id, benefit_type: payload.benefit_type, amount: request.amount, status: 'submitted' }); break
+      await db(client).from('benefit_claims').insert({ request_id: request.id, company_id: request.company_id, user_id: request.requester_user_id, benefit_type: payload.benefit_type, amount: request.amount, status: 'submitted' }); break
     case 'compensation':
-      await db(client).from('compensation_changes').insert({ request_id: request.id, user_id: intFromOption(payload.target_user_id) || request.requester_user_id, effective_date: payload.effective_date, change_percent: Number(payload.change_percent) || null, reason: payload.reason || null, initiated_by_user_id: request.requester_user_id }); break
+      await db(client).from('compensation_changes').insert({ request_id: request.id, company_id: request.company_id, user_id: intFromOption(payload.target_user_id) || request.requester_user_id, effective_date: payload.effective_date, change_percent: Number(payload.change_percent) || null, reason: payload.reason || null, initiated_by_user_id: request.requester_user_id }); break
     case 'personnel':
-      await db(client).from('personnel_changes').insert({ request_id: request.id, user_id: intFromOption(payload.target_user_id) || request.requester_user_id, change_type: payload.change_type, effective_date: payload.effective_date, reason: payload.reason || null }); break
+      await db(client).from('personnel_changes').insert({ request_id: request.id, company_id: request.company_id, user_id: intFromOption(payload.target_user_id) || request.requester_user_id, change_type: payload.change_type, effective_date: payload.effective_date, reason: payload.reason || null }); break
     default: break
   }
 }
@@ -254,7 +256,7 @@ async function applyHook(client: SupabaseClient, hook: string, request: Record<s
       const hours = Number(payload.hours) || 0
       const { data: bal } = await db(client).from('leave_balances').select('*').eq('user_id', request.requester_user_id as number).eq('leave_type_id', lt.id).eq('period_year', year).single()
       if (bal) { await db(client).from('leave_balances').update({ used_hours: (bal.used_hours || 0) + hours, version: (bal.version || 1) + 1 }).eq('id', bal.id) }
-      else { await db(client).from('leave_balances').insert({ user_id: request.requester_user_id, leave_type_id: lt.id, period_year: year, granted_hours: 0, used_hours: hours }) }
+      else { await db(client).from('leave_balances').insert({ company_id: request.company_id ?? 1, user_id: request.requester_user_id, leave_type_id: lt.id, period_year: year, granted_hours: 0, used_hours: hours }) }
       break
     }
     case 'apply_attendance_correction':
@@ -270,8 +272,9 @@ async function applyHook(client: SupabaseClient, hook: string, request: Record<s
 }
 
 async function recordAction(client: SupabaseClient, requestId: number, stepId: number | null, actorId: number, action: string, from: string, to: string, comment: string | null, ctx: { ip?: string; ua?: string } = {}) {
+  const { data: req } = await db(client).from('requests').select('company_id').eq('id', requestId).single()
   await db(client).from('approval_actions').insert({
-    request_id: requestId, approval_step_id: stepId, actor_user_id: actorId,
+    request_id: requestId, company_id: req?.company_id ?? 1, approval_step_id: stepId, actor_user_id: actorId,
     action, from_status: from, to_status: to, comment: comment || null,
     ip_address: ctx.ip || null, user_agent: ctx.ua || null
   })
@@ -310,6 +313,7 @@ export async function createAndSubmit(client: SupabaseClient, user: Record<strin
   const now = new Date().toISOString()
 
   const { data: requestData, error } = await db(client).from('requests').insert({
+    company_id: user.company_id ?? 1,
     request_no: no, module_code: moduleCode, form_code: moduleCode + '_request',
     requester_user_id: user.id, requester_department_id: user.department_id || null,
     title, status: 'in_review', amount, payload_json: JSON.stringify(payload),

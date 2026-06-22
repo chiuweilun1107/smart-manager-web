@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   }
 
   if (mod.kind === 'record' && mod.table) {
-    const query = db.from(mod.table).select('*').order('created_at' as string, { ascending: false }).limit(50)
+    const query = db.from(mod.table).select('*').eq('company_id', aiDoUser.company_id ?? 1).order('created_at' as string, { ascending: false }).limit(50)
     const scopedRoles = ['employee', 'manager']
     const { data } = scopedRoles.includes(roleCode)
       ? await query.eq('user_id' as string, aiDoUser.id)
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   }
 
   if (mod.kind === 'record' && mod.table) {
-    const { data, error } = await db.from(mod.table).insert({ ...payload, created_by_user_id: aiDoUser.id }).select().single()
+    const { data, error } = await db.from(mod.table).insert({ ...payload, created_by_user_id: aiDoUser.id, company_id: aiDoUser.company_id ?? 1 }).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ok: true, record: data })
   }

@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { visibleModules } from '@/lib/modules'
@@ -58,6 +58,10 @@ export default function Sidebar({ roleCode }: { roleCode: string }) {
   const modules = visibleModules(roleCode)
   const [collapsed, setCollapsed] = useState(false)
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set())
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  // 路由變更時自動關閉手機 drawer
+  useEffect(() => { setMobileOpen(false) }, [pathname])
 
   const groups: Record<string, typeof modules> = {}
   for (const m of modules) {
@@ -78,14 +82,22 @@ export default function Sidebar({ roleCode }: { roleCode: string }) {
   const sideW = collapsed ? '56px' : 'var(--sidebar-w)'
 
   return (
-    <aside style={{
+    <>
+    {/* 手機漢堡選單按鈕 (僅手機顯示) */}
+    <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)} aria-label="開啟選單"
+      style={{ alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', cursor: 'pointer', width: '38px', height: '38px' }}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    {/* 手機 drawer 背景遮罩 */}
+    {mobileOpen && <div className="mobile-overlay" onClick={() => setMobileOpen(false)} />}
+    <aside className={`app-sidebar${mobileOpen ? ' open' : ''}`} style={{
       width: sideW, minWidth: sideW,
       background: 'var(--surface)',
       borderRight: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column',
       overflowY: 'auto', overflowX: 'hidden',
       flexShrink: 0,
-      transition: 'width 0.2s ease, min-width 0.2s ease',
+      transition: 'width 0.2s ease, min-width 0.2s ease, transform 0.25s ease',
     }}>
       {/* Brand header */}
       <div style={{
@@ -170,5 +182,6 @@ export default function Sidebar({ roleCode }: { roleCode: string }) {
         ))}
       </nav>
     </aside>
+    </>
   )
 }
