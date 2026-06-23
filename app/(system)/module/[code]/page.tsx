@@ -6,6 +6,7 @@ import type { ComponentType } from 'react'
 import ModuleView from '@/components/ModuleView'
 import BIView from '@/components/BIView'
 import OrgView from '@/components/admin/OrgView'
+import DirectoryView from '@/components/admin/DirectoryView'
 import HrmView from '@/components/admin/HrmView'
 import RBACView from '@/components/admin/RBACView'
 import FormBuilderView from '@/components/admin/FormBuilderView'
@@ -15,6 +16,7 @@ import MenuGroupsView from '@/components/admin/MenuGroupsView'
 // view code → admin component。新增 admin 頁只需在此註冊 + modules.ts 加 view module
 const VIEW_MAP: Record<string, ComponentType<{ user: SessionUser }>> = {
   org: OrgView,
+  directory: DirectoryView,
   hrm: HrmView,
   rbac: RBACView,
   forms: FormBuilderView,

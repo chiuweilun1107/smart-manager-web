@@ -217,6 +217,7 @@ export const MODULES: Module[] = [
   },
   { code: 'hrm', name: '員工管理', icon: 'users', group: '人資', kind: 'view', view: 'hrm', roles_visible: ['hr', 'executive', 'auditor', 'manager'] },
   { code: 'org', name: '組織架構', icon: 'building-office', group: '人資', kind: 'view', view: 'org', roles_visible: ALL },
+  { code: 'directory', name: '通訊錄', icon: 'identification', group: '人資', kind: 'view', view: 'directory', roles_visible: ALL },
   { code: 'payroll', name: '薪資管理', icon: 'currency-dollar', group: '人資', kind: 'view', view: 'payroll', roles_visible: ['hr', 'finance', 'executive', 'auditor', 'employee', 'manager'] },
   {
     code: 'compensation', name: '調薪', icon: 'trending-up', group: '人資', kind: 'request', chain: 'compensation_default',

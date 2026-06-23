@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import type { SessionUser } from '@/lib/types'
 
 interface Department {
@@ -114,7 +115,7 @@ function MemberPanel({ state, depth }: { state: MemberState | undefined; depth: 
     <div style={{ padding: `8px 16px 12px ${indent}px`, display: 'flex', flexDirection: 'column', gap: '2px' }}>
       {members.map(m => (
         <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '5px 0', fontSize: '12px' }}>
-          <span style={{ color: 'var(--text)', fontWeight: 500 }}>{m.display_name}</span>
+          <Link href={`/directory/${m.id}`} style={{ color: 'var(--primary)', fontWeight: 500, textDecoration: 'none' }} title="查看通訊錄個人頁">{m.display_name}</Link>
           {m.employee_no && <span className="label-mono" style={{ color: 'var(--text-faint)' }}>{m.employee_no}</span>}
           {m.position_title && <span style={{ color: 'var(--text-muted)' }}>{m.position_title}</span>}
           {m.is_manager && (
