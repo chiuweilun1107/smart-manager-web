@@ -3,6 +3,8 @@ import { useEffect, useState, useCallback } from 'react'
 import type { SessionUser } from '@/lib/types'
 import type { ModuleField, ModuleColumn, FieldType } from '@/lib/modules'
 import { CHAINS } from '@/lib/chains'
+import { MODULES } from '@/lib/modules'
+import Icon, { ICON_NAMES, isImageIcon } from '@/components/Icon'
 
 // ──────────────────────────────────────────────
 // 型別
@@ -56,7 +58,11 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: 'select', label: '下拉選單' },
   { value: 'user', label: '人員' },
   { value: 'file', label: '檔案' },
+  { value: 'relation', label: '關聯表單' },
 ]
+
+// relation 來源模組可選清單（內建 request 模組，自訂表單於元件內補上）
+const BUILTIN_REQUEST_MODULES = MODULES.filter(m => m.kind === 'request').map(m => ({ code: m.code, name: m.name }))
 
 const CHAIN_OPTIONS = Object.keys(CHAINS)
 
@@ -128,6 +134,89 @@ const dangerBtn: React.CSSProperties = {
 }
 
 // ──────────────────────────────────────────────
+// 自動產生表單代碼（使用者不必懂「代碼」概念）— 時間戳+亂數確保唯一
+// ──────────────────────────────────────────────
+function genModuleCode(): string {
+  const t = Date.now().toString(36)
+  const r = Math.random().toString(36).slice(2, 5)
+  return `form_${t}${r}`
+}
+
+// 把上傳圖片縮放成 max px 的正方內、輸出 data URL（避免大圖塞爆 DB）
+function downscaleImage(file: File, max: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('read fail'))
+    reader.onload = () => {
+      const img = new window.Image()
+      img.onerror = () => reject(new Error('img fail'))
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height))
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('ctx fail'))
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/png'))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+// ──────────────────────────────────────────────
+// 子元件：Icon 選擇器（下拉內建 + 即時預覽 + 上傳自訂）
+// ──────────────────────────────────────────────
+function IconSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [uploadErr, setUploadErr] = useState('')
+  const uploaded = isImageIcon(value)
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 允許重選同一檔
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setUploadErr('請選擇圖片檔'); return }
+    if (file.size > 2 * 1024 * 1024) { setUploadErr('圖片請小於 2MB'); return }
+    setUploadErr('')
+    try {
+      onChange(await downscaleImage(file, 64))
+    } catch {
+      setUploadErr('圖片處理失敗')
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ width: 38, height: 38, flexShrink: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', background: 'var(--bg)' }}>
+          {value ? <Icon name={value} size={22} /> : <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>無</span>}
+        </div>
+        <select
+          style={{ ...inputStyle, flex: 1 }}
+          value={uploaded ? '__uploaded__' : value}
+          onChange={e => { if (e.target.value !== '__uploaded__') onChange(e.target.value) }}
+        >
+          <option value="">（不設定）</option>
+          {uploaded && <option value="__uploaded__">自訂上傳圖示</option>}
+          {ICON_NAMES.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <label style={{ ...ghostBtn, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          上傳
+          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUpload} />
+        </label>
+      </div>
+      {uploaded && (
+        <button type="button" onClick={() => onChange('')} style={{ ...dangerBtn, marginTop: 6, fontSize: 11 }}>移除上傳圖示</button>
+      )}
+      {uploadErr && <div style={{ marginTop: 4, fontSize: 11, color: '#e54d4d' }}>{uploadErr}</div>}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
 // 子元件：單一欄位編輯列
 // ──────────────────────────────────────────────
 function FieldRow({
@@ -137,6 +226,7 @@ function FieldRow({
   onChange,
   onDelete,
   onMove,
+  moduleOptions,
 }: {
   field: ModuleField
   index: number
@@ -144,6 +234,7 @@ function FieldRow({
   onChange: (patch: Partial<ModuleField>) => void
   onDelete: () => void
   onMove: (dir: -1 | 1) => void
+  moduleOptions: { code: string; name: string }[]
 }) {
   const [optionInput, setOptionInput] = useState('')
 
@@ -264,6 +355,45 @@ function FieldRow({
           </div>
         </div>
       )}
+
+      {/* relation 型別時設定來源模組 + 狀態過濾 */}
+      {(field.type === 'relation') && (
+        <div style={{ marginTop: '10px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+            <label style={labelStyle}>關聯來源表單</label>
+            <select
+              style={inputStyle}
+              value={field.relation?.sourceModule ?? ''}
+              onChange={e => onChange({ relation: { ...field.relation, sourceModule: e.target.value, valueKey: field.relation?.valueKey ?? 'request_no' } })}
+            >
+              <option value="">請選擇來源表單</option>
+              {moduleOptions.map(m => <option key={m.code} value={m.code}>{m.name}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingBottom: '8px' }}>
+            <input
+              type="checkbox"
+              id={`rel-approved-${index}`}
+              checked={(field.relation?.status ?? []).includes('approved')}
+              onChange={e => onChange({ relation: { ...(field.relation ?? { sourceModule: '' }), status: e.target.checked ? ['approved'] : [] } })}
+            />
+            <label htmlFor={`rel-approved-${index}`} style={{ fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>僅可選「已核准」的單據</label>
+          </div>
+        </div>
+      )}
+
+      {/* file 型別時可設定是否多檔 */}
+      {(field.type === 'file') && (
+        <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <input
+            type="checkbox"
+            id={`file-multi-${index}`}
+            checked={!!field.multiple}
+            onChange={e => onChange({ multiple: e.target.checked })}
+          />
+          <label htmlFor={`file-multi-${index}`} style={{ fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>可一次上傳多個檔案</label>
+        </div>
+      )}
     </div>
   )
 }
@@ -298,6 +428,10 @@ function FormPreview({ fields }: { fields: ModuleField[] }) {
             <select disabled style={inputStyle}>
               <option>請選擇</option>
               {(f.options ?? []).map(o => <option key={o}>{o}</option>)}
+            </select>
+          ) : f.type === 'relation' ? (
+            <select disabled style={inputStyle}>
+              <option>請選擇{f.relation?.sourceModule ? `（來源：${f.relation.sourceModule}）` : '關聯單據'}</option>
             </select>
           ) : (
             <input
@@ -335,7 +469,42 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
   const [newDraft, setNewDraft] = useState<NewFormDraft>({
     module_code: '', form_code: '', name: '', icon: '', group_code: '', group_name: '', chain_code: '', visible_roles: [],
   })
+  const [newFields, setNewFields] = useState<ModuleField[]>([])
+  const [showNewAdvanced, setShowNewAdvanced] = useState(false)
+  const [showNewPreview, setShowNewPreview] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+
+  // 開/關「新增表單」面板：開啟時自動產生代碼並清空欄位草稿
+  function toggleNewForm() {
+    setErrMsg('')
+    setShowNewForm(prev => {
+      if (!prev) {
+        setNewDraft({ module_code: genModuleCode(), form_code: '', name: '', icon: '', group_code: '', group_name: '', chain_code: '', visible_roles: [] })
+        setNewFields([])
+        setShowNewAdvanced(false)
+        setShowNewPreview(false)
+      }
+      return !prev
+    })
+  }
+
+  // ── 新增表單的欄位操作 ──
+  function addNewField() { setNewFields(prev => [...prev, EMPTY_FIELD()]) }
+  function updateNewField(index: number, patch: Partial<ModuleField>) {
+    setNewFields(prev => prev.map((f, i) => i === index ? { ...f, ...patch } : f))
+  }
+  function deleteNewField(index: number) {
+    setNewFields(prev => prev.filter((_, i) => i !== index))
+  }
+  function moveNewField(index: number, dir: -1 | 1) {
+    setNewFields(prev => {
+      const next = [...prev]
+      const target = index + dir
+      if (target < 0 || target >= next.length) return prev
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    })
+  }
 
   // ── 讀取表單清單 ──
   const loadForms = useCallback(async () => {
@@ -411,6 +580,8 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
   // ── 儲存 ──
   async function handleSave() {
     if (!selectedId) return
+    const badField = editFields.find(f => !f.key.trim() || !f.label.trim())
+    if (badField) { setErrMsg('每個欄位都要填「欄位 key」與「顯示名稱」'); return }
     setErrMsg(''); setSuccessMsg(''); setSaving(true)
     try {
       // group_code 變動時同步 group_name
@@ -444,10 +615,15 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
 
   // ── 新增表單 ──
   async function handleCreate() {
-    if (!newDraft.module_code || !newDraft.form_code || !newDraft.name) {
-      setErrMsg('module_code / form_code / 名稱 為必填')
+    if (!newDraft.name.trim()) {
+      setErrMsg('請填寫表單名稱')
       return
     }
+    // 代碼一律自動生成；若使用者在「進階」清空了，補一個
+    const moduleCode = (newDraft.module_code || genModuleCode()).trim()
+    // 欄位 key 不可空（fields_json 以 key 為資料鍵）
+    const badField = newFields.find(f => !f.key.trim() || !f.label.trim())
+    if (badField) { setErrMsg('每個欄位都要填「欄位 key」與「顯示名稱」'); return }
     setSaving(true); setErrMsg('')
     try {
       const selectedGroup = menuGroups.find(g => g.code === newDraft.group_code)
@@ -455,20 +631,22 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          module_code: newDraft.module_code,
-          form_code: newDraft.form_code,
-          name: newDraft.name,
+          module_code: moduleCode,
+          form_code: newDraft.form_code || moduleCode,
+          name: newDraft.name.trim(),
           icon: newDraft.icon || null,
           group_code: newDraft.group_code || null,
           group_name: selectedGroup ? selectedGroup.name : (newDraft.group_name || null),
           visible_roles: newDraft.visible_roles.length > 0 ? newDraft.visible_roles : null,
           chain_code: newDraft.chain_code || null,
+          fields_json: newFields,
         }),
       })
       const data = await res.json()
       if (!res.ok) { setErrMsg(data.error || '新增失敗'); return }
       setShowNewForm(false)
       setNewDraft({ module_code: '', form_code: '', name: '', icon: '', group_code: '', group_name: '', chain_code: '', visible_roles: [] })
+      setNewFields([])
       await loadForms()
       if (data.form) selectForm(data.form)
       if (data.warning) setErrMsg(data.warning)
@@ -495,6 +673,14 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
 
   const selected = forms.find(f => f.id === selectedId) ?? null
 
+  // relation 欄位可關聯的來源表單：內建 request 模組 + 自訂表單（同 code 以自訂為準）
+  const moduleOptions = (() => {
+    const map = new Map<string, { code: string; name: string }>()
+    for (const m of BUILTIN_REQUEST_MODULES) map.set(m.code, m)
+    for (const f of forms) map.set(f.module_code, { code: f.module_code, name: f.name })
+    return Array.from(map.values())
+  })()
+
   // ──────────────────────────────────────────────
   // Render
   // ──────────────────────────────────────────────
@@ -511,37 +697,28 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
           <div className="label-mono" style={{ marginTop: '4px' }}>Form Builder</div>
         </div>
         <button
-          onClick={() => { setShowNewForm(v => !v); setErrMsg('') }}
+          onClick={toggleNewForm}
           style={primaryBtn()}
         >
           {showNewForm ? '取消' : '+ 新增表單'}
         </button>
       </div>
 
-      {/* ── 新增表單 Panel ── */}
+      {/* ── 新增表單 Panel（與編輯同功：基本資訊 + 欄位設計 + 簽核 + 預覽）── */}
       {showNewForm && (
         <div style={{ ...card, padding: '20px', marginBottom: '20px' }}>
           <h2 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', margin: '0 0 16px' }}>建立新表單</h2>
+
+          {/* 基本資訊 */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '14px' }}>
             <div>
-              <label style={labelStyle}>module_code *</label>
-              <input style={inputStyle} value={newDraft.module_code} placeholder="e.g. leave"
-                onChange={e => setNewDraft(d => ({ ...d, module_code: e.target.value }))} />
-            </div>
-            <div>
-              <label style={labelStyle}>form_code *</label>
-              <input style={inputStyle} value={newDraft.form_code} placeholder="e.g. leave_v2"
-                onChange={e => setNewDraft(d => ({ ...d, form_code: e.target.value }))} />
-            </div>
-            <div>
               <label style={labelStyle}>表單名稱 *</label>
-              <input style={inputStyle} value={newDraft.name} placeholder="e.g. 請假申請"
+              <input style={inputStyle} value={newDraft.name} placeholder="例：請假申請"
                 onChange={e => setNewDraft(d => ({ ...d, name: e.target.value }))} />
             </div>
             <div>
-              <label style={labelStyle}>Icon</label>
-              <input style={inputStyle} value={newDraft.icon} placeholder="e.g. calendar"
-                onChange={e => setNewDraft(d => ({ ...d, icon: e.target.value }))} />
+              <label style={labelStyle}>圖示</label>
+              <IconSelector value={newDraft.icon} onChange={v => setNewDraft(d => ({ ...d, icon: v }))} />
             </div>
             <div>
               <label style={labelStyle}>群組 / 分類</label>
@@ -560,6 +737,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
               </select>
             </div>
           </div>
+
           {/* 可見角色 */}
           <div style={{ marginTop: '14px' }}>
             <label style={labelStyle}>可見角色（空 = 全部可見）</label>
@@ -583,7 +761,74 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
               ))}
             </div>
           </div>
-          {errMsg && <div style={{ marginTop: '12px', fontSize: '13px', color: '#e54d4d' }}>{errMsg}</div>}
+
+          {/* 進階：表單代碼（系統自動產生，一般不需更動） */}
+          <div style={{ marginTop: '12px' }}>
+            <button type="button" onClick={() => setShowNewAdvanced(v => !v)}
+              style={{ ...ghostBtn, fontSize: '12px', padding: '4px 10px' }}>
+              {showNewAdvanced ? '▾ 進階設定' : '▸ 進階設定'}
+            </button>
+            {showNewAdvanced && (
+              <div style={{ marginTop: '10px', maxWidth: '320px' }}>
+                <label style={labelStyle}>表單代碼 <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>（系統自動產生，可改成易記英文）</span></label>
+                <input style={inputStyle} value={newDraft.module_code}
+                  onChange={e => setNewDraft(d => ({ ...d, module_code: e.target.value }))} />
+              </div>
+            )}
+          </div>
+
+          {/* 欄位設計 */}
+          <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)' }}>欄位設計</span>
+                <span className="label-mono" style={{ marginLeft: '10px', fontSize: '11px' }}>{newFields.length} 個欄位</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setShowNewPreview(v => !v)} style={{ ...ghostBtn, fontSize: '12px', padding: '5px 12px' }}>
+                  {showNewPreview ? '隱藏預覽' : '即時預覽'}
+                </button>
+                <button onClick={addNewField} style={{ ...ghostBtn }}>+ 新增欄位</button>
+              </div>
+            </div>
+
+            {newFields.length === 0 && (
+              <div style={{ padding: '20px', textAlign: 'center', fontSize: '13px', color: 'var(--text-faint)', border: '1px dashed var(--border)', borderRadius: 'var(--radius)' }}>
+                尚未新增欄位，點擊「+ 新增欄位」開始設計（也可建立後再補）
+              </div>
+            )}
+
+            {newFields.map((f, i) => (
+              <FieldRow
+                key={i}
+                field={f}
+                index={i}
+                total={newFields.length}
+                onChange={patch => updateNewField(i, patch)}
+                onDelete={() => deleteNewField(i)}
+                onMove={dir => moveNewField(i, dir)}
+                moduleOptions={moduleOptions}
+              />
+            ))}
+
+            {newFields.length > 0 && (
+              <button onClick={addNewField} style={{ ...ghostBtn, width: '100%', marginTop: '4px', textAlign: 'center' }}>
+                + 新增欄位
+              </button>
+            )}
+
+            {showNewPreview && (
+              <div style={{ ...card, marginTop: '12px', overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                  <span className="label-mono">即時預覽</span>
+                  <span style={{ marginLeft: '8px', fontSize: '12px', color: 'var(--text-faint)' }}>{newDraft.name || '新表單'}</span>
+                </div>
+                <FormPreview fields={newFields} />
+              </div>
+            )}
+          </div>
+
+          {errMsg && <div style={{ marginTop: '14px', fontSize: '13px', color: '#e54d4d' }}>{errMsg}</div>}
           <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
             <button onClick={handleCreate} disabled={saving} style={primaryBtn(saving)}>
               {saving ? '建立中…' : '建立表單'}
@@ -629,7 +874,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                       {f.name}
                     </div>
                     <div className="label-mono" style={{ marginTop: '2px', fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {f.module_code} / {f.form_code}
+                      {f.module_code === f.form_code ? f.module_code : `${f.module_code} / ${f.form_code}`}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
@@ -670,17 +915,12 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                       onChange={e => setEditMeta(m => ({ ...m, name: e.target.value }))} />
                   </div>
                   <div>
-                    <label style={labelStyle}>module_code</label>
+                    <label style={labelStyle}>表單代碼 <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>（建立後固定）</span></label>
                     <input style={{ ...inputStyle, color: 'var(--text-faint)' }} value={editMeta.module_code ?? ''} readOnly />
                   </div>
                   <div>
-                    <label style={labelStyle}>form_code</label>
-                    <input style={{ ...inputStyle, color: 'var(--text-faint)' }} value={editMeta.form_code ?? ''} readOnly />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Icon</label>
-                    <input style={inputStyle} value={editMeta.icon ?? ''}
-                      onChange={e => setEditMeta(m => ({ ...m, icon: e.target.value }))} />
+                    <label style={labelStyle}>圖示</label>
+                    <IconSelector value={editMeta.icon ?? ''} onChange={v => setEditMeta(m => ({ ...m, icon: v }))} />
                   </div>
                   <div>
                     <label style={labelStyle}>群組 / 分類</label>
@@ -777,6 +1017,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                     onChange={patch => updateField(i, patch)}
                     onDelete={() => deleteField(i)}
                     onMove={dir => moveField(i, dir)}
+                    moduleOptions={moduleOptions}
                   />
                 ))}
 

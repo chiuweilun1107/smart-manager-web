@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { getEffectiveModule } from '@/lib/platform-config'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -35,5 +36,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   ])
 
   const payload = request.payload_json ? JSON.parse(request.payload_json) : {}
-  return NextResponse.json({ request: { ...request, payload }, steps: steps || [], actions: actions || [], currentUser: aiDoUser })
+  // 附上該模組的欄位定義，讓詳情頁能以 label 顯示、辨識 file 欄位渲染附件
+  const mod = await getEffectiveModule(aiDoUser.company_id ?? 1, request.module_code)
+  const fields = mod?.fields ?? []
+  return NextResponse.json({ request: { ...request, payload }, fields, steps: steps || [], actions: actions || [], currentUser: aiDoUser })
 }

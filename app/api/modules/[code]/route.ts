@@ -23,8 +23,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   if (!perms.visibleModuleCodes.includes(code)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   if (mod.kind === 'request') {
-    const { data } = await db.from('requests').select('*').eq('module_code', code).eq('requester_user_id', aiDoUser.id).order('created_at', { ascending: false }).limit(50)
-    return NextResponse.json({ items: data || [], mod })
+    // ?status=approved,in_review → 過濾單據狀態（relation 下拉用，如只列已核准的出差單）
+    const statusParam = req.nextUrl.searchParams.get('status')
+    const statusFilter = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : []
+    let q = db.from('requests').select('*').eq('module_code', code).eq('requester_user_id', aiDoUser.id)
+    if (statusFilter.length > 0) q = q.in('status', statusFilter)
+    const { data } = await q.order('created_at', { ascending: false }).limit(50)
+    // 解開 payload_json：附 payload 物件 + 攤平 payload.xxx（讓 columns 的 payload.destination 等取得到值）
+    const items = (data || []).map(r => {
+      let payload: Record<string, unknown> = {}
+      try { payload = r.payload_json ? JSON.parse(r.payload_json) : {} } catch { payload = {} }
+      const flat: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(payload)) flat[`payload.${k}`] = v
+      return { ...r, payload, ...flat }
+    })
+    return NextResponse.json({ items, mod })
   }
 
   if (mod.kind === 'record' && mod.table) {
@@ -58,8 +71,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const ua = req.headers.get('user-agent') || undefined
 
   if (mod.kind === 'request') {
-    const result = await createAndSubmit(svc, aiDoUser, code, payload, { ip, ua })
-    return NextResponse.json({ ok: true, request: result })
+    try {
+      const result = await createAndSubmit(svc, aiDoUser, code, payload, { ip, ua })
+      return NextResponse.json({ ok: true, request: result })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '送出失敗'
+      return NextResponse.json({ error: msg }, { status: 400 })
+    }
   }
 
   if (mod.kind === 'record' && mod.table) {

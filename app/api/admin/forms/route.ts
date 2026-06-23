@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireAdminUser } from '@/lib/api-guard'
 import type { ModuleField, ModuleColumn } from '@/lib/modules'
+import { MODULE_MAP } from '@/lib/modules'
 
 // GET /api/admin/forms — 列出該 company 所有 form_definitions
 export async function GET() {
@@ -30,19 +31,40 @@ function tooLong(v: unknown): boolean {
   return typeof v === 'string' && v.length > MAX_TEXT
 }
 
+// 清洗前端傳來的 fields_json：必為陣列、每欄至少有非空 key/label，過濾無效項
+function sanitizeFields(raw: unknown): ModuleField[] {
+  if (!Array.isArray(raw)) return []
+  return (raw as ModuleField[]).filter(
+    f => f && typeof f.key === 'string' && f.key.trim() !== '' && typeof f.label === 'string' && f.label.trim() !== ''
+  )
+}
+
 // POST /api/admin/forms — 新增表單
 export async function POST(req: NextRequest) {
   const { user, error: authErr } = await requireAdminUser()
   if (authErr) return authErr
   const body = await req.json()
-  const { module_code, form_code, name, icon, group_name, group_code, visible_roles, chain_code, sort_order } = body
+  const { module_code, name, icon, group_name, group_code, visible_roles, chain_code, sort_order } = body
+  // form_code 對開單邏輯無作用（requests.form_code 由 bpm 另行硬寫），
+  // 但 form_definitions.form_code 為 NOT NULL + UNIQUE(company,module,form)，故缺省自動帶 module_code。
+  const form_code = body.form_code || module_code
 
-  if (!module_code) return NextResponse.json({ error: 'module_code 為必填' }, { status: 400 })
-  if (!form_code) return NextResponse.json({ error: 'form_code 為必填' }, { status: 400 })
+  if (!module_code) return NextResponse.json({ error: '表單代碼為必填' }, { status: 400 })
   if (!name) return NextResponse.json({ error: '表單名稱為必填' }, { status: 400 })
-  if ([module_code, form_code, name, icon, group_name, group_code].some(tooLong)) {
+  // module_code 是 sidebar 導航 / 開單的 key，且會進 URL，限定安全字元
+  if (!/^[A-Za-z0-9_-]+$/.test(String(module_code))) {
+    return NextResponse.json({ error: '表單代碼只能用英文、數字、底線或減號' }, { status: 400 })
+  }
+  // 不可佔用內建模組代碼（否則 resolveFormFields 會覆寫內建表單）
+  if (MODULE_MAP[module_code]) {
+    return NextResponse.json({ error: `表單代碼「${module_code}」已被系統內建模組使用，請換一個` }, { status: 400 })
+  }
+  // icon 排除長度檢查：可能是使用者上傳圖示的 data URL（遠長於一般文字）
+  if ([module_code, form_code, name, group_name, group_code].some(tooLong)) {
     return NextResponse.json({ error: `欄位長度不可超過 ${MAX_TEXT} 字元` }, { status: 400 })
   }
+  const fields_json = sanitizeFields(body.fields_json)
+  const columns_json = Array.isArray(body.columns_json) ? (body.columns_json as ModuleColumn[]) : ([] as ModuleColumn[])
 
   const db = createServiceClient().schema('aido')
   const { data, error } = await db
@@ -54,8 +76,8 @@ export async function POST(req: NextRequest) {
       name,
       version: 1,
       is_active: true,
-      fields_json: [] as ModuleField[],
-      columns_json: [] as ModuleColumn[],
+      fields_json,
+      columns_json,
       chain_code: chain_code ?? null,
       icon: icon ?? null,
       group_name: group_name ?? null,
@@ -99,7 +121,8 @@ export async function PUT(req: NextRequest) {
   const { id, name, icon, group_name, group_code, visible_roles, chain_code, is_active, fields_json, columns_json, sort_order } = body
 
   if (!id) return NextResponse.json({ error: '缺少 id' }, { status: 400 })
-  if ([name, icon, group_name, group_code].some(tooLong)) {
+  // icon 排除長度檢查：可能是使用者上傳圖示的 data URL
+  if ([name, group_name, group_code].some(tooLong)) {
     return NextResponse.json({ error: `欄位長度不可超過 ${MAX_TEXT} 字元` }, { status: 400 })
   }
 
@@ -122,8 +145,8 @@ export async function PUT(req: NextRequest) {
   if (visible_roles !== undefined) patch.visible_roles = visible_roles
   if (chain_code !== undefined) patch.chain_code = chain_code
   if (is_active !== undefined) patch.is_active = is_active
-  if (fields_json !== undefined) patch.fields_json = fields_json
-  if (columns_json !== undefined) patch.columns_json = columns_json
+  if (fields_json !== undefined) patch.fields_json = sanitizeFields(fields_json)
+  if (columns_json !== undefined) patch.columns_json = Array.isArray(columns_json) ? columns_json : []
   if (sort_order !== undefined) patch.sort_order = sort_order
 
   const { data, error } = await db

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!file) return NextResponse.json({ error: '檔案不存在' }, { status: 404 })
   try {
     const url = await signedUrl(file.file_path)
-    return NextResponse.json({ url, fileName: file.file_name })
+    return NextResponse.json({ url, fileName: file.file_name, mimeType: file.mime_type ?? null })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }

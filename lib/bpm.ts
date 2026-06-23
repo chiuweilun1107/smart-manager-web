@@ -2,6 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { CHAINS } from './chains'
 import { resolveChain, getEffectiveModule } from './platform-config'
 import { MODULE_MAP } from './modules'
+import type { ModuleField } from './modules'
 import { sendEmail, approvalPendingEmail, requestResultEmail } from './email'
 import { dispatchWebhook } from './webhook'
 
@@ -9,6 +10,67 @@ import { dispatchWebhook } from './webhook'
 function genNo(prefix: string) { return `${prefix.toUpperCase().slice(0, 4)}-${Date.now().toString().slice(-9)}` }
 function intFromOption(v: unknown): number {
   if (v == null) return 0; const m = String(v).match(/-?\d+/); return m ? parseInt(m[0], 10) : 0
+}
+
+// 後端鏡像前端 ModuleView.fieldVisible：依另一欄位值判斷此欄是否「應顯示/應驗證」
+function fieldVisibleSrv(f: ModuleField, payload: Record<string, unknown>): boolean {
+  if (!f.showIf) return true
+  const left = String(payload[f.showIf.field] ?? '')
+  const rv = f.showIf.value
+  const ln = parseFloat(left)
+  const rn = typeof rv === 'number' ? rv : parseFloat(String(rv))
+  switch (f.showIf.op) {
+    case '>': return ln > rn
+    case '>=': return ln >= rn
+    case '<': return ln < rn
+    case '<=': return ln <= rn
+    case '=': return left === String(rv)
+    case '!=': return left !== String(rv)
+    default: return true
+  }
+}
+
+// 後端必填驗證：對「可見的 required 欄位」檢查 payload 是否為空，空則 throw（杜絕繞過前端直打 API）
+function validateRequiredFields(fields: ModuleField[] | undefined, payload: Record<string, unknown>) {
+  for (const f of fields || []) {
+    if (!f.required) continue
+    if (!fieldVisibleSrv(f, payload)) continue
+    const v = payload[f.key]
+    if (v === undefined || v === null || String(v).trim() === '') {
+      throw new Error(`「${f.label}」為必填`)
+    }
+  }
+}
+
+// 關聯表單完整性驗證：所填關聯單號必須是「本人在來源模組、狀態符合」的真實單據（杜絕亂填/繞過）
+async function validateRelationFields(
+  client: SupabaseClient,
+  user: Record<string, unknown>,
+  fields: ModuleField[] | undefined,
+  payload: Record<string, unknown>,
+) {
+  for (const f of fields || []) {
+    if (f.type !== 'relation' || !f.relation) continue
+    if (!fieldVisibleSrv(f, payload)) continue
+    const val = payload[f.key]
+    if (val === undefined || val === null || String(val).trim() === '') continue // 空值由 required 驗證處理
+    const rel = f.relation
+    const valueKey = rel.valueKey === 'id' ? 'id' : 'request_no'
+    const matchVal: string | number = valueKey === 'id' ? Number(val) : String(val)
+    const { data } = await db(client)
+      .from('requests')
+      .select('id, status')
+      .eq('module_code', rel.sourceModule)
+      .eq('requester_user_id', user.id as number)
+      .eq('company_id', (user.company_id as number) ?? 1)
+      .eq(valueKey, matchVal)
+      .limit(1)
+      .maybeSingle()
+    if (!data) throw new Error(`「${f.label}」找不到對應的單據，請重新選擇`)
+    if (rel.status && rel.status.length > 0 && !rel.status.includes(String(data.status))) {
+      throw new Error(`「${f.label}」所選單據狀態不符（需：${rel.status.join('、')}）`)
+    }
+  }
 }
 function evalCond(cond: { field: string; op: string; value: number } | undefined, request: Record<string, unknown>, payload: Record<string, unknown>): boolean {
   if (!cond) return true
@@ -311,6 +373,10 @@ export async function createAndSubmit(client: SupabaseClient, user: Record<strin
   // 含自訂表單 (DB form_definitions) → 自訂表單也能開單
   const mod = await getEffectiveModule(Number(user.company_id) || 1, moduleCode)
   if (!mod || mod.kind !== 'request') throw new Error('模組不可開單: ' + moduleCode)
+  // 後端再驗一次「可見必填欄位」，杜絕直接打 API 繞過前端驗證（如差旅費未填關聯出差單號）
+  validateRequiredFields(mod.fields, payload)
+  // 關聯表單：驗證所填關聯單號是本人、狀態符合的真實單據
+  await validateRelationFields(client, user, mod.fields, payload)
   const amount = mod.amountField ? Number(payload[mod.amountField]) || 0 : null
   const title = `${mod.name} · ${user.display_name}`
   const risk = assessRisk(moduleCode, payload)

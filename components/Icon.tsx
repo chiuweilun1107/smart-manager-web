@@ -43,6 +43,14 @@ const PATHS: Record<string, string> = {
   'chart-bar-square': 'M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25z',
 }
 
+// 內建 Heroicons 名稱清單（給表單設計器 icon 下拉用）
+export const ICON_NAMES = Object.keys(PATHS)
+
+// 判斷是否為使用者上傳/外部圖片（data URL 或 http(s) 連結）
+export function isImageIcon(name: string | null | undefined): boolean {
+  return !!name && (name.startsWith('data:') || name.startsWith('http://') || name.startsWith('https://'))
+}
+
 interface IconProps {
   name: string
   className?: string
@@ -50,6 +58,20 @@ interface IconProps {
 }
 
 export default function Icon({ name, className = '', size = 18 }: IconProps) {
+  // 使用者上傳的自訂圖示（data URL / 外部 URL）直接以 <img> 呈現
+  if (isImageIcon(name)) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={name}
+        alt=""
+        width={size}
+        height={size}
+        className={className}
+        style={{ objectFit: 'contain', display: 'inline-block', borderRadius: '4px' }}
+      />
+    )
+  }
   const d = PATHS[name]
   if (!d) return null
   // viewBox "-1.5 -1.5 27 27" adds 1.5u padding on every side so glyphs whose

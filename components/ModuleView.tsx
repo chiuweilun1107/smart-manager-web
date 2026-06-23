@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { Module, ModuleField } from '@/lib/modules'
 import type { SessionUser } from '@/lib/types'
+import RelationSelect from '@/components/RelationSelect'
+import FilePreview from '@/components/FilePreview'
 
 const STATUS_MAP: Record<string, string> = {
   draft: '草稿', in_review: '審核中', approved: '已核准', rejected: '已駁回', returned: '退回', cancelled: '已取消'
@@ -11,9 +13,9 @@ const STATUS_MAP: Record<string, string> = {
 interface ModuleViewProps { module: Module; user: SessionUser }
 
 /** 條件顯示：依另一欄位值決定本欄是否出現 */
-function fieldVisible(f: ModuleField, form: Record<string, string>): boolean {
+function fieldVisible(f: ModuleField, form: Record<string, unknown>): boolean {
   if (!f.showIf) return true
-  const left = form[f.showIf.field] ?? ''
+  const left = String(form[f.showIf.field] ?? '')
   const rv = f.showIf.value
   const ln = parseFloat(left)
   const rn = typeof rv === 'number' ? rv : parseFloat(String(rv))
@@ -46,11 +48,15 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
   const [items, setItems] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState<Record<string, string>>({})
-  const [fileNames, setFileNames] = useState<Record<string, string>>({})
+  const [form, setForm] = useState<Record<string, string | string[]>>({})
   const [uploading, setUploading] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState('')
+
+  // 受控輸入用：只取字串值（file 多檔欄位存陣列，不綁進文字輸入）
+  const sv = (k: string): string => { const v = form[k]; return typeof v === 'string' ? v : '' }
+  // 取某 file 欄位已上傳的 fileId 陣列（相容單一字串與陣列）
+  const fileIdsOf = (k: string): string[] => { const v = form[k]; return Array.isArray(v) ? v : (typeof v === 'string' && v ? [v] : []) }
 
   useEffect(() => {
     fetch(`/api/modules/${mod.code}`)
@@ -59,15 +65,43 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
       .catch(() => setLoading(false))
   }, [mod.code])
 
-  async function handleFile(key: string, file: File) {
+  // 上傳一或多個檔案；multiple 欄位累加成 fileId 陣列，單檔欄位存單一字串
+  async function handleFiles(key: string, files: File[], multiple: boolean) {
+    if (files.length === 0) return
     setUploading(key); setErrMsg('')
-    const fd = new FormData(); fd.append('file', file)
-    const res = await fetch('/api/upload', { method: 'POST', body: fd })
-    const data = await res.json()
-    setUploading(null)
-    if (!res.ok) { setErrMsg(data.error || '上傳失敗'); return }
-    setForm(p => ({ ...p, [key]: String(data.fileId) }))
-    setFileNames(p => ({ ...p, [key]: data.fileName }))
+    try {
+      const uploaded: { id: string; name: string }[] = []
+      for (const file of files) {
+        const fd = new FormData(); fd.append('file', file)
+        const res = await fetch('/api/upload', { method: 'POST', body: fd })
+        const data = await res.json()
+        if (!res.ok) { setErrMsg(`${file.name}：${data.error || '上傳失敗'}`); break }
+        uploaded.push({ id: String(data.fileId), name: data.fileName })
+      }
+      if (uploaded.length === 0) return
+      if (multiple) {
+        setForm(p => {
+          const cur = Array.isArray(p[key]) ? (p[key] as string[]) : (typeof p[key] === 'string' && p[key] ? [p[key] as string] : [])
+          return { ...p, [key]: [...cur, ...uploaded.map(u => u.id)] }
+        })
+      } else {
+        setForm(p => ({ ...p, [key]: uploaded[0].id }))
+      }
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  // 移除已上傳的某個檔案（依索引）
+  function removeFile(key: string, idx: number, multiple: boolean) {
+    if (multiple) {
+      setForm(p => {
+        const cur = Array.isArray(p[key]) ? (p[key] as string[]) : []
+        return { ...p, [key]: cur.filter((_, i) => i !== idx) }
+      })
+    } else {
+      setForm(p => { const n = { ...p }; delete n[key]; return n })
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -76,7 +110,10 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
     // 驗證所有可見欄位
     for (const f of mod.fields || []) {
       if (!fieldVisible(f, form)) continue
-      const err = validateField(f, form[f.key] ?? '')
+      const raw = form[f.key]
+      // file 多檔欄位以「陣列非空」判斷有無值；其餘用字串
+      const valForCheck = Array.isArray(raw) ? (raw.length > 0 ? 'x' : '') : (typeof raw === 'string' ? raw : '')
+      const err = validateField(f, valForCheck)
       if (err) { setErrMsg(err); return }
     }
     setSubmitting(true)
@@ -86,7 +123,7 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
     const data = await res.json()
     setSubmitting(false)
     if (!res.ok) { setErrMsg(data.error || '送出失敗'); return }
-    setShowForm(false); setForm({}); setFileNames({})
+    setShowForm(false); setForm({})
     const refreshed = await fetch(`/api/modules/${mod.code}`).then(r => r.json())
     setItems(refreshed.items || [])
   }
@@ -117,26 +154,43 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginBottom: '6px' }}>
                   {f.label}{f.required && <span style={{ color: 'var(--danger)', marginLeft: '2px' }}>*</span>}
                 </label>
-                {f.type === 'select' ? (
-                  <select required={f.required} value={form[f.key] ?? ''} className={inputCls} style={inputStyle}
+                {f.type === 'relation' ? (
+                  <RelationSelect field={f} value={sv(f.key)} onChange={v => setForm(p => ({ ...p, [f.key]: v }))} />
+                ) : f.type === 'select' ? (
+                  <select required={f.required} value={sv(f.key)} className={inputCls} style={inputStyle}
                     onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}>
                     <option value="">請選擇</option>
                     {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : f.type === 'textarea' ? (
-                  <textarea required={f.required} rows={3} value={form[f.key] ?? ''} className={inputCls} style={inputStyle}
+                  <textarea required={f.required} rows={3} value={sv(f.key)} className={inputCls} style={inputStyle}
                     onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
                 ) : f.type === 'file' ? (
                   <div>
-                    <input type="file" onChange={e => { const file = e.target.files?.[0]; if (file) handleFile(f.key, file) }}
-                      style={{ fontSize: '13px', color: 'var(--text-muted)' }} />
+                    <input
+                      type="file"
+                      multiple={f.multiple}
+                      accept="image/*,.pdf"
+                      onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ''; if (files.length) handleFiles(f.key, files, !!f.multiple) }}
+                      style={{ fontSize: '13px', color: 'var(--text-muted)' }}
+                    />
                     {uploading === f.key && <span style={{ fontSize: '12px', color: 'var(--primary)', marginLeft: '8px' }}>上傳中…</span>}
-                    {fileNames[f.key] && <span style={{ fontSize: '12px', color: 'var(--success)', marginLeft: '8px' }}>✓ {fileNames[f.key]}</span>}
+                    {fileIdsOf(f.key).length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '10px' }}>
+                        {fileIdsOf(f.key).map((id, i) => (
+                          <div key={id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <FilePreview fileId={id} size={84} showName />
+                            <button type="button" onClick={() => removeFile(f.key, i, !!f.multiple)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e54d4d', fontSize: '12px', lineHeight: 1, padding: 0 }}>移除</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <input
                     type={f.type === 'number' || f.type === 'money' ? 'number' : f.type === 'date' ? 'date' : f.type === 'datetime' ? 'datetime-local' : 'text'}
-                    required={f.required} placeholder={f.placeholder} value={form[f.key] ?? ''} className={inputCls} style={inputStyle}
+                    required={f.required} placeholder={f.placeholder} value={sv(f.key)} className={inputCls} style={inputStyle}
                     onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
                 )}
               </div>
@@ -147,7 +201,7 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
                 style={{ background: 'var(--primary)', color: '#fff', fontSize: '13px', padding: '8px 24px', borderRadius: 'var(--radius)', border: 'none', cursor: 'pointer', opacity: submitting ? 0.5 : 1 }}>
                 {submitting ? '送出中…' : '送出申請'}
               </button>
-              <button type="button" onClick={() => { setShowForm(false); setForm({}); setFileNames({}) }}
+              <button type="button" onClick={() => { setShowForm(false); setForm({}) }}
                 style={{ fontSize: '13px', padding: '8px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>取消</button>
             </div>
           </form>

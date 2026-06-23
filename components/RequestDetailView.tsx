@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { SessionUser } from '@/lib/types'
+import type { ModuleField } from '@/lib/modules'
+import FilePreview from '@/components/FilePreview'
 
 const STATUS_MAP: Record<string, string> = {
   draft: '草稿', in_review: '審核中', approved: '已核准', rejected: '已駁回',
@@ -30,9 +32,17 @@ type RequestRow = Record<string, unknown> & { payload?: Record<string, unknown> 
 
 interface RequestData {
   request: RequestRow
+  fields?: ModuleField[]
   steps: StepRow[]
   actions: ActionRow[]
   currentUser: { id: number; primary_role_id?: number; primary_role?: { code: string } }
+}
+
+// 把 payload 值正規化成 fileId 陣列（相容單一字串與陣列）
+function toFileIds(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map(x => String(x)).filter(Boolean)
+  if (v === undefined || v === null || v === '') return []
+  return [String(v)]
 }
 
 export default function RequestDetailView({ requestId, user }: { requestId: number; user: SessionUser }) {
@@ -99,12 +109,26 @@ export default function RequestDetailView({ requestId, user }: { requestId: numb
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">
-          {Object.entries(payload).slice(0, 10).map(([k, v]) => (
-            <div key={k}>
-              <span className="text-gray-500">{k}：</span>
-              <span className="text-gray-800">{String(v ?? '—')}</span>
-            </div>
-          ))}
+          {Object.entries(payload).slice(0, 12).map(([k, v]) => {
+            const field = (data.fields ?? []).find(f => f.key === k)
+            const fileIds = field?.type === 'file' ? toFileIds(v) : null
+            if (fileIds) {
+              return (
+                <div key={k} className="col-span-2">
+                  <span className="text-gray-500 block mb-2">{field?.label || k}：</span>
+                  {fileIds.length === 0
+                    ? <span className="text-gray-800">—</span>
+                    : <div className="flex flex-wrap gap-2">{fileIds.map(id => <FilePreview key={id} fileId={id} showName />)}</div>}
+                </div>
+              )
+            }
+            return (
+              <div key={k}>
+                <span className="text-gray-500">{field?.label || k}：</span>
+                <span className="text-gray-800">{String(v ?? '—')}</span>
+              </div>
+            )
+          })}
           {Boolean(req.amount) && (
             <div>
               <span className="text-gray-500">金額：</span>

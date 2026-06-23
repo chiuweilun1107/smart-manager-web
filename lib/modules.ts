@@ -1,4 +1,4 @@
-export type FieldType = 'text' | 'textarea' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'user' | 'file'
+export type FieldType = 'text' | 'textarea' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'user' | 'file' | 'relation'
 export type ModuleKind = 'request' | 'record' | 'view'
 
 export interface ModuleField {
@@ -13,6 +13,15 @@ export interface ModuleField {
   showIf?: { field: string; op: '>' | '>=' | '<' | '<=' | '=' | '!='; value: string | number }
   /** 驗證規則：regex pattern / 數值範圍 / 自訂訊息 */
   validate?: { pattern?: string; min?: number; max?: number; message?: string }
+  /** 檔案欄位 (type='file') 是否允許一次上傳多個檔案（值存 fileId 字串陣列） */
+  multiple?: boolean
+  /** 關聯表單 (type='relation')：下拉列出登入者自己在 sourceModule 已提出且狀態符合的單據，選後顯示該單詳情 */
+  relation?: {
+    sourceModule: string        // 來源模組 code，如 'business_trip'
+    status?: string[]           // 只顯示這些狀態的單，如 ['approved']；省略=全部
+    labelKeys?: string[]        // 下拉標籤組成的 payload 欄位（省略=自動取來源欄位前幾項）
+    valueKey?: string           // 存入 payload 的值，'request_no'(預設) 或 'id'
+  }
 }
 
 export interface ModuleColumn {
@@ -124,7 +133,8 @@ export const MODULES: Module[] = [
       { key: 'expense_date', label: '費用日期', type: 'date', required: true },
       { key: 'amount', label: '金額', type: 'money', required: true },
       { key: 'tax_id', label: '統編' },
-      { key: 'business_trip_no', label: '關聯出差單號（差旅費請先申請出差核准後填入）', type: 'text' },
+      { key: 'business_trip_no', label: '關聯出差單號（差旅費請先申請出差核准）', type: 'relation', required: true, showIf: { field: 'category', op: '=', value: '差旅' }, relation: { sourceModule: 'business_trip', status: ['approved'], labelKeys: ['destination', 'start_at'], valueKey: 'request_no' } },
+      { key: 'attachments', label: '憑證附件（高鐵票 / 收據等，可一次上傳多張）', type: 'file', multiple: true },
       { key: 'reason', label: '說明', type: 'textarea' }
     ],
     columns: [
