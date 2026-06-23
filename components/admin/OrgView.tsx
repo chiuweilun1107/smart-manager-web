@@ -21,6 +21,22 @@ interface UserOption {
   employee_no: string | null
 }
 
+interface Member {
+  id: number
+  employee_no: string | null
+  display_name: string
+  status: string
+  position_title: string | null
+  is_manager: boolean
+}
+
+// 每個部門展開時的成員載入狀態
+interface MemberState {
+  loading: boolean
+  error: string | null
+  members: Member[] | null
+}
+
 const card: React.CSSProperties = {
   background: 'var(--surface)',
   border: '1px solid var(--border)',
@@ -82,25 +98,68 @@ function buildTree(depts: Department[]): Array<Department & { children: Departme
   return roots
 }
 
+function MemberPanel({ state, depth }: { state: MemberState | undefined; depth: number }) {
+  const indent = 16 + depth * 24 + 20
+  if (!state || state.loading) {
+    return <div style={{ padding: `10px 16px 10px ${indent}px`, color: 'var(--text-faint)', fontSize: '12px' }}>載入成員中…</div>
+  }
+  if (state.error) {
+    return <div style={{ padding: `10px 16px 10px ${indent}px`, color: 'var(--danger, #e53e3e)', fontSize: '12px' }}>{state.error}</div>
+  }
+  const members = state.members ?? []
+  if (members.length === 0) {
+    return <div style={{ padding: `10px 16px 10px ${indent}px`, color: 'var(--text-faint)', fontSize: '12px' }}>此部門目前沒有在職成員</div>
+  }
+  return (
+    <div style={{ padding: `8px 16px 12px ${indent}px`, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      {members.map(m => (
+        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '5px 0', fontSize: '12px' }}>
+          <span style={{ color: 'var(--text)', fontWeight: 500 }}>{m.display_name}</span>
+          {m.employee_no && <span className="label-mono" style={{ color: 'var(--text-faint)' }}>{m.employee_no}</span>}
+          {m.position_title && <span style={{ color: 'var(--text-muted)' }}>{m.position_title}</span>}
+          {m.is_manager && (
+            <span style={{ fontSize: '11px', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 'var(--radius)', padding: '0 6px', lineHeight: '16px' }}>主管</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function DeptRow({
   dept,
   depth,
   allDepts,
+  expanded,
+  memberState,
+  onToggle,
   onEdit,
   onDelete,
 }: {
   dept: Department & { children: Department[] }
   depth: number
   allDepts: Department[]
+  expanded: Set<number>
+  memberState: Record<number, MemberState>
+  onToggle: (d: Department) => void
   onEdit: (d: Department) => void
   onDelete: (d: Department) => void
 }) {
+  const isExpanded = expanded.has(dept.id)
   return (
     <>
       <tr style={{ borderTop: '1px solid var(--border)' }}>
         <td style={{ padding: '10px 16px', paddingLeft: `${16 + depth * 24}px`, color: 'var(--text)', fontWeight: depth === 0 ? 600 : 400 }}>
           {depth > 0 && <span style={{ color: 'var(--text-faint)', marginRight: '6px' }}>└</span>}
-          {dept.name}
+          <button
+            onClick={() => onToggle(dept)}
+            aria-expanded={isExpanded}
+            title="展開成員"
+            style={{ background: 'none', border: 'none', padding: 0, margin: 0, cursor: 'pointer', color: 'inherit', font: 'inherit', fontWeight: 'inherit', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <span style={{ color: 'var(--text-faint)', fontSize: '10px', display: 'inline-block', width: '10px', transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.12s' }}>▶</span>
+            {dept.name}
+          </button>
           {dept.code && <span className="label-mono" style={{ marginLeft: '8px', color: 'var(--text-faint)' }}>{dept.code}</span>}
         </td>
         <td style={{ padding: '10px 16px', color: 'var(--text-muted)', fontSize: '13px' }}>
@@ -119,8 +178,15 @@ function DeptRow({
           </div>
         </td>
       </tr>
+      {isExpanded && (
+        <tr style={{ background: 'var(--surface-2)' }}>
+          <td colSpan={5} style={{ padding: 0 }}>
+            <MemberPanel state={memberState[dept.id]} depth={depth} />
+          </td>
+        </tr>
+      )}
       {dept.children.map(child => (
-        <DeptRow key={child.id} dept={child as Department & { children: Department[] }} depth={depth + 1} allDepts={allDepts} onEdit={onEdit} onDelete={onDelete} />
+        <DeptRow key={child.id} dept={child as Department & { children: Department[] }} depth={depth + 1} allDepts={allDepts} expanded={expanded} memberState={memberState} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} />
       ))}
     </>
   )
@@ -147,6 +213,8 @@ export default function OrgView({ user }: { user: SessionUser }) {
   const [form, setForm] = useState<ModalForm>(emptyForm())
   const [saving, setSaving] = useState(false)
   const [modalErr, setModalErr] = useState('')
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const [memberState, setMemberState] = useState<Record<number, MemberState>>({})
   const mountedRef = useRef(true)
 
   const fetchDepts = useCallback(async (signal?: AbortSignal) => {
@@ -178,6 +246,37 @@ export default function OrgView({ user }: { user: SessionUser }) {
       /* other errors silently ignored for user list */
     }
   }, [])
+
+  const fetchMembers = useCallback(async (deptId: number) => {
+    setMemberState(s => ({ ...s, [deptId]: { loading: true, error: null, members: s[deptId]?.members ?? null } }))
+    try {
+      const r = await fetch(`/api/admin/org/${deptId}/members`)
+      const d = await r.json()
+      if (!mountedRef.current) return
+      if (!r.ok) throw new Error(d.error || '載入成員失敗')
+      setMemberState(s => ({ ...s, [deptId]: { loading: false, error: null, members: d.members ?? [] } }))
+    } catch (e: unknown) {
+      if (!mountedRef.current) return
+      setMemberState(s => ({ ...s, [deptId]: { loading: false, error: e instanceof Error ? e.message : '載入成員失敗', members: null } }))
+    }
+  }, [])
+
+  const toggleExpand = useCallback((d: Department) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(d.id)) {
+        next.delete(d.id)
+      } else {
+        next.add(d.id)
+        // lazy fetch：只在首次展開且尚無資料時抓
+        setMemberState(s => {
+          if (!s[d.id]?.members && !s[d.id]?.loading) fetchMembers(d.id)
+          return s
+        })
+      }
+      return next
+    })
+  }, [fetchMembers])
 
   useEffect(() => {
     mountedRef.current = true
@@ -214,6 +313,8 @@ export default function OrgView({ user }: { user: SessionUser }) {
       const r = await fetch(`/api/admin/org?id=${d.id}`, { method: 'DELETE' })
       const data = await r.json()
       if (!r.ok) { alert(data.error || '刪除失敗'); return }
+      setExpanded(prev => { const next = new Set(prev); next.delete(d.id); return next })
+      setMemberState(s => { const next = { ...s }; delete next[d.id]; return next })
       fetchDepts()
     } catch {
       alert('網路錯誤，請重試')
@@ -242,6 +343,8 @@ export default function OrgView({ user }: { user: SessionUser }) {
       if (!r.ok) { setModalErr(d.error || '儲存失敗'); return }
       setModalOpen(false)
       fetchDepts()
+      // 主管/部門可能變動，重抓目前展開中的成員（is_manager 標記會變）
+      expanded.forEach(id => fetchMembers(id))
     } catch {
       setModalErr('網路錯誤，請重試')
     } finally {
@@ -283,7 +386,7 @@ export default function OrgView({ user }: { user: SessionUser }) {
                 <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>尚無部門資料</td></tr>
               )}
               {!loading && tree.map(d => (
-                <DeptRow key={d.id} dept={d} depth={0} allDepts={depts} onEdit={openEdit} onDelete={handleDelete} />
+                <DeptRow key={d.id} dept={d} depth={0} allDepts={depts} expanded={expanded} memberState={memberState} onToggle={toggleExpand} onEdit={openEdit} onDelete={handleDelete} />
               ))}
             </tbody>
           </table>
