@@ -26,7 +26,7 @@ function loadCreds(): { email: string; password: string } | null {
   try {
     const raw = localStorage.getItem(LS_CREDS)
     if (!raw) return null
-    const o = JSON.parse(atob(raw))
+    const o = JSON.parse(decodeURIComponent(atob(raw)))
     return typeof o?.email === 'string' && typeof o?.password === 'string' ? o : null
   } catch { return null }
 }
@@ -41,14 +41,15 @@ export default function LoginPage() {
   const router = useRouter()
   const autoTried = useRef(false)
 
-  async function doLogin(e: string, p: string, isAuto = false) {
+  async function doLogin(e: string, p: string, isAuto = false, persistOverride?: boolean) {
     setLoading(true); setError('')
     try {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       const { error: authError } = await supabase.auth.signInWithPassword({ email: e, password: p })
       if (authError) { setError(authError.message); if (isAuto) localStorage.removeItem(LS_AUTO); return }
-      if (remember) { localStorage.setItem(LS_CREDS, btoa(JSON.stringify({ email: e, password: p }))); localStorage.setItem(LS_AUTO, '1') }
+      const persist = persistOverride ?? remember
+      if (persist) { localStorage.setItem(LS_CREDS, btoa(encodeURIComponent(JSON.stringify({ email: e, password: p })))); localStorage.setItem(LS_AUTO, '1') }
       else { localStorage.removeItem(LS_CREDS); localStorage.removeItem(LS_AUTO) }
       router.push('/dashboard'); router.refresh()
     } catch { setError('登入失敗，請稍後再試') } finally { setLoading(false) }
@@ -64,7 +65,7 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   function handleSubmit(ev: FormEvent) { ev.preventDefault(); doLogin(email, pwd) }
-  function loginAs(acc: typeof DEMO_ACCOUNTS[0]) { setEmail(acc.email); setPwd(acc.pwd); doLogin(acc.email, acc.pwd) }
+  function loginAs(acc: typeof DEMO_ACCOUNTS[0]) { setEmail(acc.email); setPwd(acc.pwd); doLogin(acc.email, acc.pwd, false, false) }
 
   const inputStyle: React.CSSProperties = {
     width: '100%', background: 'var(--bg)', border: '1px solid var(--border)',
@@ -177,7 +178,7 @@ export default function LoginPage() {
                   </div>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
+                  <input type="checkbox" checked={remember} onChange={e => { setRemember(e.target.checked); if (!e.target.checked) { localStorage.removeItem(LS_CREDS); localStorage.removeItem(LS_AUTO) } }} />
                   記住帳號密碼，下次自動登入
                 </label>
                 <button type="submit" disabled={loading}
