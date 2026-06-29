@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { uploadFile } from '@/lib/storage'
-
-const ALLOWED_MIME = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
-  'application/pdf',
-])
+import { ALLOWED_MIME, verifyMagicBytes } from '@/lib/mime-verify'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -24,6 +20,7 @@ export async function POST(req: NextRequest) {
 
   const companyId = aiDoUser.company_id ?? 1
   const buf = Buffer.from(await file.arrayBuffer())
+  if (!verifyMagicBytes(buf, file.type)) return NextResponse.json({ error: '檔案內容與格式不符' }, { status: 415 })
   let path: string, size: number
   try {
     const r = await uploadFile({ companyId, userId: aiDoUser.id, fileName: file.name, contentType: file.type, body: buf })

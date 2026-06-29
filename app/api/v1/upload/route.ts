@@ -2,15 +2,11 @@ import { NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { uploadFile } from '@/lib/storage'
 import { authBearerUser, preflight, jsonCors, companyOf } from '@/lib/agent-auth'
+import { ALLOWED_MIME, verifyMagicBytes } from '@/lib/mime-verify'
 
 // Phase E: 給 agent app 跨來源用的 Bearer-JWT 版上傳 endpoint。
 // 鏡像 app/api/upload/route.ts，唯一差異：身分來自 Authorization Bearer JWT（authBearerUser），
 // 非 cookie session；owner/company 取自驗過的 user，service client 只在驗身分後做受 scope 限制的操作。
-
-const ALLOWED_MIME = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
-  'application/pdf',
-])
 
 export async function OPTIONS(req: NextRequest) {
   return preflight(req)
@@ -33,6 +29,7 @@ export async function POST(req: NextRequest) {
   const db = svc.schema('aido')
 
   const buf = Buffer.from(await file.arrayBuffer())
+  if (!verifyMagicBytes(buf, file.type)) return jsonCors(req, { error: '檔案內容與格式不符' }, { status: 415 })
   let path: string, size: number
   try {
     const r = await uploadFile({ companyId, userId, fileName: file.name, contentType: file.type, body: buf })
