@@ -5,6 +5,7 @@ import { MODULE_MAP } from './modules'
 import type { ModuleField } from './modules'
 import { sendEmail, approvalPendingEmail, requestResultEmail } from './email'
 import { dispatchWebhook } from './webhook'
+import { audit } from './audit'
 
 // ---------- helpers ----------
 function genNo(prefix: string) { return `${prefix.toUpperCase().slice(0, 4)}-${Date.now().toString().slice(-9)}` }
@@ -448,6 +449,7 @@ export async function createAndSubmit(client: SupabaseClient, user: Record<strin
     await syncCurrentStep(client, requestData.id)
     await recordAction(client, requestData.id, null, Number(user.id), 'submit', 'draft', 'in_review', null, ctx)
     await notifyActiveApprovers(client, requestData.id, title)
+    void audit({ client, actorUserId: Number(user.id), action: 'request_create', companyId: Number(user.company_id) || 1, entityType: 'request', entityId: requestData.id, moduleCode, after: { request_no: no, status: 'in_review' }, ip: ctx.ip, ua: ctx.ua })
   } catch (e) {
     void Promise.resolve(db(client).from('requests').update({ status: 'error' }).eq('id', requestData.id))
     throw e
@@ -502,6 +504,7 @@ export async function submitDraft(client: SupabaseClient, user: Record<string, u
     await syncCurrentStep(client, requestId)
     await recordAction(client, requestId, null, Number(user.id), 'submit', 'draft', 'in_review', null, ctx)
     await notifyActiveApprovers(client, requestId, fresh.title)
+    void audit({ client, actorUserId: Number(user.id), action: 'request_submit', companyId: Number(user.company_id) || 1, entityType: 'request', entityId: requestId, moduleCode: String(request.module_code), after: { status: 'in_review' }, ip: ctx.ip, ua: ctx.ua })
   } catch (e) {
     void Promise.resolve(db(client).from('requests').update({ status: 'error' }).eq('id', requestId))
     throw e
@@ -520,6 +523,7 @@ export async function act(client: SupabaseClient, user: Record<string, unknown>,
     if (request.requester_user_id !== user.id) throw new Error('只有申請人可取消')
     await db(client).from('requests').update({ status: 'cancelled', cancelled_at: now }).eq('id', requestId)
     await recordAction(client, requestId, null, Number(user.id), 'cancel', request.status, 'cancelled', comment, ctx)
+    void audit({ client, actorUserId: Number(user.id), action: 'request_cancel', companyId: Number(request.company_id) || 1, entityType: 'request', entityId: requestId, after: { action: 'cancel', comment }, ip: ctx.ip, ua: ctx.ua })
     return await getReq(client, requestId)
   }
 
@@ -530,6 +534,7 @@ export async function act(client: SupabaseClient, user: Record<string, unknown>,
   if (action === 'approve') {
     await db(client).from('approval_steps').update({ status: 'approved', completed_at: now }).eq('id', step.id)
     await recordAction(client, requestId, step.id, Number(user.id), 'approve', 'in_review', 'in_review', comment, ctx)
+    void audit({ client, actorUserId: Number(user.id), action: 'request_approve', companyId: Number(request.company_id) || 1, entityType: 'request', entityId: requestId, after: { step_no: tierNo, comment }, ip: ctx.ip, ua: ctx.ua })
     let tierDone = false
     if ((step.required_mode || 'all') === 'any') {
       await db(client).from('approval_steps').update({ status: 'skipped', completed_at: now }).eq('request_id', requestId).eq('step_no', tierNo).eq('status', 'active')
@@ -560,11 +565,13 @@ export async function act(client: SupabaseClient, user: Record<string, unknown>,
     await db(client).from('approval_steps').update({ status: 'rejected', completed_at: now }).eq('id', step.id)
     await db(client).from('requests').update({ status: 'rejected', completed_at: now }).eq('id', requestId)
     await recordAction(client, requestId, step.id, Number(user.id), 'reject', 'in_review', 'rejected', comment, ctx)
+    void audit({ client, actorUserId: Number(user.id), action: 'request_reject', companyId: Number(request.company_id) || 1, entityType: 'request', entityId: requestId, after: { step_no: tierNo, comment }, ip: ctx.ip, ua: ctx.ua })
     await notifyRequester(client, request, '您的單被退回（駁回）', `${request.title} 被駁回：${comment || ''}`)
   } else if (action === 'return') {
     await db(client).from('approval_steps').update({ status: 'returned', completed_at: now }).eq('id', step.id)
     await db(client).from('requests').update({ status: 'returned' }).eq('id', requestId)
     await recordAction(client, requestId, step.id, Number(user.id), 'return', 'in_review', 'returned', comment, ctx)
+    void audit({ client, actorUserId: Number(user.id), action: 'request_return', companyId: Number(request.company_id) || 1, entityType: 'request', entityId: requestId, after: { step_no: tierNo, comment }, ip: ctx.ip, ua: ctx.ua })
     await notifyRequester(client, request, '您的單需補件', `${request.title} 被退回修改：${comment || ''}`)
   } else { throw new Error('未知動作：' + action) }
 
@@ -616,6 +623,7 @@ export async function resubmit(client: SupabaseClient, user: Record<string, unkn
   await expandSteps(client, fresh, payload || JSON.parse(fresh.payload_json || '{}'))
   await syncCurrentStep(client, requestId)
   await recordAction(client, requestId, null, Number(user.id), 'resubmit', 'returned', 'in_review', null, ctx)
+  void audit({ client, actorUserId: Number(user.id), action: 'request_resubmit', companyId: Number(user.company_id) || 1, entityType: 'request', entityId: requestId, moduleCode: String(request.module_code), after: { status: 'in_review' }, ip: ctx.ip, ua: ctx.ua })
   await notifyActiveApprovers(client, requestId, request.title)
   return await getReq(client, requestId)
 }
