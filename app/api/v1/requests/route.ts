@@ -3,7 +3,8 @@ import { verifyApiKey } from '@/lib/apikey'
 import { createServiceClient } from '@/lib/supabase/server'
 import { createAndSubmit, createDraft } from '@/lib/bpm'
 import { getEffectiveModule } from '@/lib/platform-config'
-import { authBearerUser, companyOf, jsonCors, preflight } from '@/lib/agent-auth'
+import { authBearerUser, companyOf, roleOf, jsonCors, preflight } from '@/lib/agent-auth'
+import { canAct } from '@/lib/rbac'
 
 export async function OPTIONS(req: NextRequest) { return preflight(req) }
 
@@ -59,6 +60,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await authBearerUser(req)
   if (!user) return jsonCors(req, { error: 'Unauthorized' }, { status: 401 })
+  // 建單(含草稿)需 create 權限：擋掉只讀角色(如 auditor)，與網頁端 ROLE_ACTIONS 同一判斷
+  if (!canAct(roleOf(user), 'create')) return jsonCors(req, { error: '此角色無建立單據權限' }, { status: 403 })
 
   let body: { module_code?: string; payload?: Record<string, unknown>; mode?: string }
   try { body = await req.json() } catch { return jsonCors(req, { error: '無效的 JSON' }, { status: 400 }) }
