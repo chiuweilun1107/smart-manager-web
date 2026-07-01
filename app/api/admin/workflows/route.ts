@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireAdminUser } from '@/lib/api-guard'
+import { CHAINS } from '@/lib/chains'
+import { MODULES } from '@/lib/modules'
 
-// GET /api/admin/workflows — 列該 company 所有 approval_chain_templates + roles 清單
+// GET /api/admin/workflows — 列該 company 的「所有系統簽核流程」= 內建 CHAINS + DB 覆寫合併 + roles。
+// 內建流程是 code 常數(lib/chains.ts)不在 DB;流程設計器需看到全部內建流程才能編輯。
+// DB approval_chain_templates row 覆寫同 chain_code 內建(resolveChain 也是 DB-first,行為一致)。
+// 內建未被覆寫者給 synthetic 負數 id(sentinel):前端據此走 POST 建覆寫而非 PUT。
 export async function GET() {
   const { user, error: authErr } = await requireAdminUser()
   if (authErr) return authErr
@@ -22,8 +27,33 @@ export async function GET() {
   if (tplResult.error) return NextResponse.json({ error: tplResult.error.message }, { status: 500 })
   if (rolesResult.error) return NextResponse.json({ error: rolesResult.error.message }, { status: 500 })
 
+  const dbRows = (tplResult.data ?? []).map(r => ({ ...r, is_builtin: !!CHAINS[r.chain_code], customized: true }))
+  const overridden = new Set(dbRows.map(r => r.chain_code))
+
+  // 內建 CHAINS 中「尚無 DB 覆寫」者 → 合成唯讀基底(可編輯,存檔時建覆寫)。
+  // name 依對應 module 中文名(與 seed-platform 一致);module_code 由 chain_code 去 _default 推導。
+  const builtinRows = Object.values(CHAINS)
+    .filter(c => !overridden.has(c.chain_code))
+    .map((c, i) => {
+      const moduleCode = c.chain_code.replace(/_default$/, '')
+      const mod = MODULES.find(m => m.code === moduleCode)
+      return {
+        id: -(i + 1),
+        company_id: user.companyId,
+        chain_code: c.chain_code,
+        name: mod ? `${mod.name}簽核流程` : c.chain_code,
+        module_code: mod ? moduleCode : null,
+        amount_field: c.amount_field ?? 'amount',
+        steps_json: c.steps ?? [],
+        is_active: true,
+        created_at: '',
+        is_builtin: true,
+        customized: false,
+      }
+    })
+
   return NextResponse.json({
-    templates: tplResult.data ?? [],
+    templates: [...builtinRows, ...dbRows],
     roles: rolesResult.data ?? [],
   })
 }

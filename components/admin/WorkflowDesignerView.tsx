@@ -6,7 +6,7 @@ import type { ChainStep, ApproverRef } from '@/lib/chains'
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface WorkflowTemplate {
-  id: number
+  id: number            // 正數=DB row;負數=尚無 DB 覆寫的內建流程(synthetic sentinel)
   chain_code: string
   name: string
   module_code: string | null
@@ -14,6 +14,8 @@ interface WorkflowTemplate {
   steps_json: ChainStep[]
   is_active: boolean
   created_at: string
+  is_builtin?: boolean  // chain_code 命中系統內建 CHAINS
+  customized?: boolean  // 有對應 DB approval_chain_templates row
 }
 
 interface Role {
@@ -659,6 +661,18 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
     setSaveMsg('')
   }
 
+  // 重新載入流程清單(存內建覆寫後 id 由負轉正 → 需 reload 才拿到真實 row)
+  async function reloadTemplates(): Promise<WorkflowTemplate[]> {
+    try {
+      const r = await fetch('/api/admin/workflows')
+      if (!r.ok) return []
+      const d = await r.json()
+      const tpls: WorkflowTemplate[] = d.templates ?? []
+      setTemplates(tpls)
+      return tpls
+    } catch { return [] }
+  }
+
   async function handleSave() {
     if (!selected) return
 
@@ -689,23 +703,37 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
     // Re-number step_no in multiples of 10
     const normalized = steps.map((s, i) => ({ ...s, step_no: (i + 1) * 10 }))
 
-    const res = await fetch('/api/admin/workflows', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: selected.id, steps_json: normalized }),
-    })
+    // 內建流程(id<0,尚無 DB 覆寫) → POST 建覆寫;既有 DB row → PUT 更新
+    const isBuiltinNew = selected.id < 0
+    const res = isBuiltinNew
+      ? await fetch('/api/admin/workflows', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chain_code: selected.chain_code, name: selected.name, module_code: selected.module_code, amount_field: selected.amount_field, steps_json: normalized }),
+        })
+      : await fetch('/api/admin/workflows', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: selected.id, steps_json: normalized }),
+        })
     const data = await res.json()
     setSaving(false)
     if (!res.ok) { setSaveMsg('儲存失敗：' + (data.error || '')); return }
-    // Update local state
-    setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, steps_json: normalized } : t))
-    setSelected(prev => prev ? { ...prev, steps_json: normalized } : prev)
-    setSteps(normalized)
-    setSaveMsg('已儲存')
+    if (isBuiltinNew && data.template) {
+      // 內建存完 id 由負轉正 → reload + 用回傳的新 row 重新選取
+      await reloadTemplates()
+      selectTemplate(data.template)
+    } else {
+      setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, steps_json: normalized } : t))
+      setSelected(prev => prev ? { ...prev, steps_json: normalized } : prev)
+      setSteps(normalized)
+    }
+    setSaveMsg(isBuiltinNew ? '已建立覆寫並儲存' : '已儲存')
     setTimeout(() => setSaveMsg(''), 2500)
   }
 
   async function handleToggleActive(t: WorkflowTemplate) {
+    // 內建流程尚無 DB 覆寫(id<0)：resolveChain 對 inactive DB row 會 fallback 回 code CHAIN,
+    // 切換啟用其實無效果 → 先請使用者編輯儲存(建覆寫)再切,避免誤導。
+    if (t.id < 0) { setSaveMsg('內建流程請先編輯並儲存(建立覆寫)後，才能切換啟用狀態'); setTimeout(() => setSaveMsg(''), 3000); return }
     const res = await fetch('/api/admin/workflows', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -718,6 +746,7 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
   }
 
   async function handleDelete(t: WorkflowTemplate) {
+    if (t.id < 0) return // 純內建無 DB row,不可刪(清單也不顯示刪除鈕)
     if (!confirm(`確定要刪除「${t.name}」嗎？`)) return
     const res = await fetch(`/api/admin/workflows?id=${t.id}`, { method: 'DELETE' })
     if (!res.ok) return
@@ -840,14 +869,27 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>模組: {t.module_code}</div>
                   )}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{(t.steps_json ?? []).length} 個關卡</span>
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDelete(t) }}
-                      style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: '11px', padding: '2px 4px' }}
-                      title="刪除流程"
-                    >
-                      ✕
-                    </button>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {/* 來源 badge：內建 / 內建·已修改 / 自訂 */}
+                      <span style={{
+                        fontSize: '10px', padding: '1px 6px', borderRadius: '999px',
+                        background: !t.is_builtin ? '#fef3c7' : t.customized ? '#dbeafe' : 'var(--surface-2)',
+                        color: !t.is_builtin ? '#b45309' : t.customized ? '#2563eb' : 'var(--text-faint)',
+                      }}>
+                        {!t.is_builtin ? '自訂' : t.customized ? '內建·已修改' : '內建'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{(t.steps_json ?? []).length} 個關卡</span>
+                    </span>
+                    {/* 刪除鈕只對真實 DB row(id>0);內建覆寫刪除=還原;純內建(id<0)無刪除鈕 */}
+                    {t.id > 0 && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDelete(t) }}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: '11px', padding: '2px 4px' }}
+                        title={t.is_builtin ? '刪除覆寫(還原為系統內建流程)' : '刪除流程'}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
